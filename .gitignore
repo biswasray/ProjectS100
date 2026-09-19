@@ -1,0 +1,29 @@
+# --- credentials (never commit) ---
+firmware/adbkey.pub
+**/adbkey
+**/adbkey.pub
+
+# --- firmware / device artifacts (copyrighted + device-specific) ---
+# Populate locally with tools/fetch_firmware.py and edl reads; never committed.
+firmware/*
+!firmware/README.md
+!firmware/.gitkeep
+
+# --- third-party clone (setup.ps1 clones bkerler/edl) ---
+tools/edl/
+
+# --- build artifacts / binaries ---
+tools/s60su
+tools/zadig.exe
+tools/logs/
+*.log
+
+# --- python ---
+**/__pycache__/
+*.pyc
+*.pyo
+
+# --- os / editor junk ---
+.DS_Store
+Thumbs.db
+*.swp
