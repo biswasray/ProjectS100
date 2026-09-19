@@ -27,3 +27,12 @@ tools/logs/
 .DS_Store
 Thumbs.db
 *.swp
+
+# --- os/ (native phoneME): sources are cloned + patched by os/scripts/fetch_phoneme.sh,
+#     builds happen in WSL (~/.cache/s100), only scripts/patches/port are committed
+os/phoneME/
+os/build/
+os/out/
+os/toolchain/bin/
+os/examples/**/*.jar
+os/examples/**/*.jad

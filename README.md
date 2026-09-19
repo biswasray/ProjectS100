@@ -6,8 +6,10 @@ Qualcomm **EDL (Emergency Download / firehose)**, with a reproducible one-comman
 setup.
 
 It gets you: a full partition backup/restore workflow, **authorized ADB**, and a
-persistent **root shell** — the foundation for further modding (e.g. running a
-J2ME runtime as a sideloaded KaiOS app).
+persistent **root shell** — the foundation for further modding. Built on that,
+[`os/`](os/README.md) cross-compiles Sun's **phoneME** (CLDC-HI + MIDP 2.1) into
+a single static ARM binary that runs J2ME MIDlets **directly on the LCD
+framebuffer and keypad** with KaiOS stopped — a native "J2ME OS" mode.
 
 > ⚠️ **Disclaimer — read this.**
 > Rooting/flashing a phone can **brick it** and **voids your warranty**. This
@@ -72,6 +74,8 @@ tools/          scripts + docs (this is the toolkit)
   edl.cmd, patch_boot.cmd, *.py   wrappers + EDL diagnostics
   README.md, HOW_TO_START.md      reference + from-scratch guide
 firmware/       empty in the repo; populated locally (gitignored)
+os/             native J2ME runtime: phoneME cross-built for the phone, running on
+                the framebuffer with KaiOS stopped (see os/README.md)
 ```
 
 Not included (regenerated or downloaded locally, and gitignored): the firmware

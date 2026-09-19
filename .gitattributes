@@ -1,0 +1,7 @@
+# shell scripts run inside WSL/on the phone: always LF
+*.sh text eol=lf
+*.c text eol=lf
+*.h text eol=lf
+*.patch text eol=lf
+*.rc text eol=lf
+*.conf text eol=lf

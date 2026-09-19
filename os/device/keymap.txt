@@ -1,0 +1,41 @@
+# JioPhone LF-2403N keypad -> MIDP key map, one "<linux keycode> <MIDP key>" per line.
+#
+# Installed as /data/j2me/keymap.txt (or pointed to by $MIDP_KEYMAP). When the
+# file is present it REPLACES the built-in table in fb_keymapping.c, so list
+# every key. Find the codes with `device/probe.sh` (pulls the Gonk .kl files)
+# or by running `keyprobe` on the phone. Names (case-insensitive):
+#   0-9 STAR POUND UP DOWN LEFT RIGHT SELECT SOFT1 SOFT2 CLEAR BACKSPACE
+#   SEND END POWER SPACE GAMEA GAMEB GAMEC GAMED HOME SWITCH_APP ROTATE
+#   VIRT_KEYB IGNORE
+#
+# The values below are the standard Linux codes a Qualcomm reference keypad
+# reports (KEY_0..KEY_9, KEY_NUMERIC_*, D-pad, MENU/BACK soft keys, SEND,
+# POWER). Verify them against your unit before relying on this file.
+2   1
+3   2
+4   3
+5   4
+6   5
+7   6
+8   7
+9   8
+10  9
+11  0
+522 STAR
+523 POUND
+55  STAR
+103 UP
+108 DOWN
+105 LEFT
+106 RIGHT
+28  SELECT
+232 SELECT
+352 SELECT
+139 SOFT1
+158 SOFT2
+231 SEND
+169 SEND
+116 END
+14  CLEAR
+115 SWITCH_APP
+114 ROTATE

@@ -1,0 +1,145 @@
+diff --git a/cldc/build/linux_arm/linux_arm.cfg b/cldc/build/linux_arm/linux_arm.cfg
+index f9d1f3a..2d301e4 100644
+--- a/cldc/build/linux_arm/linux_arm.cfg
++++ b/cldc/build/linux_arm/linux_arm.cfg
+@@ -58,6 +58,9 @@ archExpr = case "`uname -m`" in  \
+             i86pc) \
+                 echo i386 \
+                 ;; \
++            x86_64) \
++                echo i386 \
++                ;; \
+             sparc*)  \
+                 echo sparc \
+                 ;; \
+diff --git a/cldc/build/share/jvm.make b/cldc/build/share/jvm.make
+index a38de35..8fee3e6 100644
+--- a/cldc/build/share/jvm.make
++++ b/cldc/build/share/jvm.make
+@@ -604,7 +604,7 @@ dependencies: $(DEPEND_TIMESTAMP)
+ # incls/*.incl files
+ $(GEN_DIR)/platform:
+ 	$(A)if test ! -d $(GEN_DIR); then \
+-	    mkdir $(GEN_DIR); \
++	    mkdir -p $(GEN_DIR); \
+ 	fi
+ 	$(A)echo '// auto-generated. Do not edit.'  > $@
+ 	$(A)echo 'os_family    = $(os_family)'         >> $@
+@@ -619,7 +619,7 @@ $(DEPEND_TIMESTAMP): $(BUILDTOOL_JAR) \
+                      $(GEN_DIR)/platform \
+ 		     $(IncludeDB)
+ 	$(A)if test ! -d $(GEN_DIR)/incls; then \
+-	    mkdir $(GEN_DIR)/incls; \
++	    mkdir -p $(GEN_DIR)/incls; \
+ 	fi
+ 	$(A)echo generating $(DEPEND_MAKEFILE) ...
+ 	$(A)rm -f $(DEPEND_MAKEFILE)
+@@ -641,7 +641,7 @@ BUILD_FLAGS_HPP = $(WorkSpace)/src/vm/share/utilities/BuildFlags.hpp
+ 
+ $(GEN_DIR)/jvmconfig.h:	$(BUILDTOOL_JAR) $(BUILD_FLAGS_HPP) $(GEN_DIR)/platform
+ 	$(A)if test ! -d $(GEN_DIR); then \
+-	    mkdir $(GEN_DIR); \
++	    mkdir -p $(GEN_DIR); \
+ 	fi
+ 	$(A)$(JAVA) -jar $(BUILDTOOL_JAR) config $(GEN_DIR)/platform \
+                 $(BUILD_FLAGS_HPP) $@ $(EXTRA_JVMCONFIG)
+@@ -1962,19 +1962,24 @@ CPP_DEF_FLAGS	        += $(CPP_DEF_FLAGS_$(BUILD))
+ # C compiler flags
+ CPP_DEF_FLAGS           += -pipe -DGCC
+ CPP_DEF_FLAGS           += -Wreturn-type -Wcomment -Wparentheses -Wformat
+-CPP_DEF_FLAGS           += -fstrict-aliasing
++# Modern gcc (>= 4.4) miscompiles the VM with type-based alias analysis and
++# null-pointer-check deletion (oop handles are punned through raw pointers).
++CPP_DEF_FLAGS           += -fno-strict-aliasing -fno-delete-null-pointer-checks -fwrapv
+ 
+ # C++ specific compiler flags
++# 2007-era C++: brace-initialised int tables with 0x8xxxxxxx values are hard
++# errors under the C++11 narrowing rules that gcc >= 6 defaults to.
++CPLUSPLUS_FLAGS         += -std=gnu++98
+ CPLUSPLUS_FLAGS         += -fno-gnu-keywords
+ CPLUSPLUS_FLAGS         += -fno-operator-names
+ CPLUSPLUS_FLAGS         += -fno-exceptions
+ CPLUSPLUS_FLAGS         += -fno-optional-diags
+ CPLUSPLUS_FLAGS         += -fno-rtti
+ 
+-CPP_DEF_FLAGS_i386       = -Di386 -m32
++CPP_DEF_FLAGS_i386       = -Di386
+ CPP_DEF_FLAGS_arm	 =
+ CPP_DEF_FLAGS_win32      = -DWIN32 -D_WINDOWS
+-CPP_DEF_FLAGS_linux      = -DLINUX -m32
++CPP_DEF_FLAGS_linux      = -DLINUX
+ ifeq ($(target_platform), linux_javacall)
+ CPP_DEF_FLAGS_javacall   = -DLINUX
+ endif
+@@ -2017,8 +2022,14 @@ ifeq ($(LINK_PTHREAD), true)
+ LINK_FLAGS             += -lpthread
+ endif
+ 
+-# We want to link for 32-bit systems
++# We want to link 32-bit host tools. Target link flags come from the platform
++# .cfg; the ARM cross compiler does not understand -m32.
++ifeq ($(gcc_arch), i386)
++# _FILE_OFFSET_BITS=64: 32-bit stat() otherwise fails with EOVERFLOW on file
++# systems with 64-bit inode numbers (e.g. WSL /mnt/c) and classpath lookups fail.
++CPP_DEF_FLAGS          += -m32 -D_FILE_OFFSET_BITS=64
+ LINK_FLAGS             += -m32
++endif
+ 
+ ifeq ($(ENABLE_PCSL), true)
+ PCSL_LIBS               = $(PCSL_DIST_DIR)/lib/libpcsl_memory.a  \
+@@ -2044,18 +2055,23 @@ LINK_FLAGS             += -static
+ endif
+ 
+ # statically link romgen, so that it can be used on another Linux distribution
+-# that may have an incompatible libc.so
++# that may have an incompatible libc.so. ENABLE_STATIC_ROMGEN=false disables
++# this (glibc 2.39 i386 libm.a is missing fmod/fmodf, breaking static links).
++ifneq ($(ENABLE_STATIC_ROMGEN), false)
+ ifeq ($(host_os)-$(IsRomGen), linux-true)
+ LINK_FLAGS             += -static
+ endif
++endif
+ 
+ ifeq ($(PROFILING), true)
+ CPP_FLAGS              += -pg
+ LINK_FLAGS             += -pg
+ endif
+ 
+-# We want 32-bit assembly
++# We want 32-bit assembly (x86 host tools only; ARM gas has no --32)
++ifeq ($(gcc_arch), i386)
+ ASM_FLAGS              += --32
++endif
+ 
+ ifeq ($(ENABLE_XSCALE_WMMX_INSTRUCTIONS)-$(IsTarget)-$(arch), true-true-arm)
+ ASM_FLAGS              += -mcpu=iwmmxt
+diff --git a/cldc/src/vm/cpu/c/AsmStubs_i386.s b/cldc/src/vm/cpu/c/AsmStubs_i386.s
+index f316c86..60889b6 100644
+--- a/cldc/src/vm/cpu/c/AsmStubs_i386.s
++++ b/cldc/src/vm/cpu/c/AsmStubs_i386.s
+@@ -24,7 +24,7 @@
+ # information or have any questions.
+ #
+ 
+-.arch i486
++# .arch i486 removed: binutils >= 2.41 reads it as "i486 without x87" and rejects fld/fmul
+ .text
+ .align 16
+ 
+diff --git a/preverifier/src/file.c b/preverifier/src/file.c
+index 9529c55..53f2ec7 100644
+--- a/preverifier/src/file.c
++++ b/preverifier/src/file.c
+@@ -761,7 +761,11 @@ VerifyFile(char *fn)
+                 }
+             }
+             WriteClass(cb);
+-            Str2IDFree_Local(&nameTypeHash);
++            /* Do NOT free nameTypeHash here. Already-loaded classes keep
++             * fieldblock IDs allocated from this table; resetting it lets a
++             * later class receive an ID that an earlier class (e.g.
++             * java.lang.Object.wait) already holds, and ResolveMethods then
++             * treats an unrelated method as an override of a final method. */
+         }
+     }
+ }
