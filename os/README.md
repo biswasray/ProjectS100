@@ -37,6 +37,7 @@ fresh PC to Java on the phone; this file is the reference behind it.
 | JioPhone framebuffer + evdev port (`fb_port/jiophone`) | **runs on the phone** (2026-09-20): 240x320 RGB565, stride 512, pan works, keypad via `event0` |
 | App manager, installer, running a user MIDlet, key events | **verified under emulation**: install `Hello.jad` -> run -> Canvas paints, D-pad/keypad arrive with the right MIDP codes |
 | S100 shell (`os/port/`): idle screen, menu manager, key map, Messaging/Contacts/Log/Settings/Organiser/Applications | **built and emulated** (2026-09-20); contacts, messages, notes, log and settings persist in RMS; no telephony/SMS behind Call and Send yet |
+| Camera (photo + video), File manager (phone memory / memory card), package installer (.jad/.jar from a file), Settings > Connectivity (Wi-Fi, Hotspot, USB, Bluetooth) | **added 2026-09-20**; the backends (`device/s100_net.sh`, `s100_cam.sh`, `port/.../native/s100_native.c`) were probed on the phone: Wi-Fi scan/status, hotspot start/stop, USB composition switching and `mm-qcamera-app` preview/snapshot dumps all work from the Java runtime's root context. Bluetooth is on/off + name only (no pairing without Gecko's `bluetoothd`); video sound via `tinycap` is best effort |
 | Key map | **verified**: `device/keymap.txt` matches the phone's `matrix_keypad.kl` code for code |
 | On-device launcher, deploy, probe, screenshot scripts | **work on hardware** (with the `gsu` helper, see *Root without capabilities*) |
 | Networking | sockets are compiled in, but `gethostbyname` in a static glibc binary has no NSS -> **DNS will not resolve** on the phone until PCSL gets its own resolver (IP literals work) |
@@ -75,12 +76,15 @@ os/
     screenshot.sh           dump the phone's fb0 to a PNG
     rebuild_vm.sh           incremental cldc rebuild + MIDP relink + package
     check_port.sh           5 s javac type check of os/port against the last MIDP build
+    check_native.sh         host build + self test of the shell's native helper (JPEG, AVI, exec)
+    asciify.py              rewrite non-ASCII text in os/port Java sources as \uXXXX
     emu.sh                  run the ARM runtime on the PC (qemu + fake framebuffer)
     fbdump.py, sendkey.py   screenshot the fake fb / inject keypad events
     mkmidlet.sh             javac + preverify + jar a MIDlet suite (no WTK needed)
   port/                     the S100 shell (plain files overlaid on the build, see port/README.md)
-    ams/appmanager_ui/      AppManagerUIImpl + Shell/HomeScreen/MenuManager/Keymap/... (Java)
-    ams/icons/              menu icons (PNG, drawn by gen_icons.py) -> appdb/*.raw
+    ams/appmanager_ui/      AppManagerUIImpl + Shell/HomeScreen/MenuManager/Keymap/... (Java),
+                            Camera/FileManager/Connectivity/ImageViewScreen/Sys + native/s100_native.c
+    ams/icons/              menu and file icons (PNG, drawn by gen_icons.py) -> appdb/*.raw
   examples/Hello/           HelloMIDlet: screen size, colour ramp, last key pressed
   docs/                     emulator screenshots
   patches/
@@ -88,6 +92,8 @@ os/
     0002-midp-jiophone-...  the JioPhone linux_fb port + device config
   device/
     j2me.sh                 on-phone launcher (stops b2g, runs the AMS / a suite / installer)
+    s100_net.sh             Wi-Fi / hotspot / USB / Bluetooth backend (wpa_cli, ndc, setprop)
+    s100_cam.sh             camera backend (drives mm-qcamera-app, tinycap for sound)
     keymap.txt              evdev keycode -> MIDP key table, editable on the phone
     keyprobe.c              tiny static tool that prints keypad event codes
     gsu.c                   "group su": adds the Android groups the adb root shell lacks
@@ -120,14 +126,15 @@ stdout; redirect them.
 What the build produces (`os/out/j2me/`):
 
 - `bin/runMidlet` — the whole runtime in one **static** ARM executable: VM,
-  romized MIDP classes, Chameleon LCDUI, application manager, installer.
+  romized MIDP classes (with JPEG decoding, `USE_JPEG=true`), Chameleon
+  LCDUI, application manager, installer, the S100 shell and its native helper.
 - `bin/keyprobe` — keypad code dumper.
 - `lib/` — `skin.bin` (Chameleon look), `_main.ks` (CA keystore),
   `_policy.txt`/`_function_groups.txt` (permission policy), properties.
 - `appdb/` — "internal storage": AMS icons/splash `.raw` images (including
   the `s100_*.raw` menu icons), `_main.ks`; installed suites and the shell's
   RMS stores (`s100_prefs`, contacts, messages, ...) land here too.
-- `j2me.sh`, `keymap.txt`.
+- `j2me.sh`, `keymap.txt`, `s100_net.sh`, `s100_cam.sh`.
 
 ### Try it without the phone
 

@@ -30,10 +30,14 @@ stopped; when it exits, `b2g` is started again, so the phone is never lost.
 
 The user experience on the phone is a Nokia Series 40 style shell (the
 **S100 shell**, sources in `os/port/`): an idle screen with the clock and
-"Go to / Menu / Names" soft keys, a 3x2 icon main menu (Messaging, Contacts,
-Log, Settings, Organiser, Applications), a dialer, a multitap text editor
-and the usual submenus. Installed `.jad/.jar` suites appear under
-**Applications > Collection**. Keys: centre = Menu/Select, left soft =
+"Go to / Menu / Names" soft keys, a 3x3 icon main menu (Messaging, Contacts,
+Log, Settings, Organiser, Applications, Camera), a dialer, a multitap text
+editor and the usual submenus. Installed `.jad/.jar` suites appear under
+**Applications > Collection**; **Applications > Install from file** (or
+opening a `.jad`/`.jar` in **Applications > File manager**) installs one
+from the phone memory or the memory card. **Camera** takes photos and
+Motion-JPEG video clips into `DCIM/Camera`; **Settings > Connectivity**
+has Wi-Fi, Hotspot, USB and Bluetooth. Keys: centre = Menu/Select, left soft =
 Go to / Options, right soft = Names / Back, End (power key) = back to the
 idle screen (hold it there to switch off to KaiOS); inside a MIDlet End
 closes the MIDlet. `os/port/README.md` has the full key map.

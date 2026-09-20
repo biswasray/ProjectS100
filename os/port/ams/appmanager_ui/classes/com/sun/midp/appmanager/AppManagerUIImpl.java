@@ -21,6 +21,7 @@ import com.sun.midp.configurator.Constants;
 import com.sun.midp.i18n.Resource;
 import com.sun.midp.i18n.ResourceConstants;
 import com.sun.midp.main.MIDletProxy;
+import com.sun.midp.main.MIDletSuiteUtils;
 import com.sun.midp.midlet.MIDletSuite;
 import com.sun.midp.midletsuite.MIDletInfo;
 import com.sun.midp.midletsuite.MIDletSuiteStorage;
@@ -108,15 +109,39 @@ class AppManagerUIImpl implements AppManagerUI, CommandListener {
     }
 
     void install() {
-        manager.installSuite();
+        shell.whenReleased(new Runnable() {
+            public void run() { manager.installSuite(); }
+        });
+    }
+
+    /**
+     * Installs a suite from a URL (file:///path/x.jad or .jar) with the
+     * GraphicalInstaller, exactly like the discovery MIDlet does for a
+     * downloaded link; the "start it now?" question follows as usual.
+     */
+    void installFrom(final String url, final String label) {
+        shell.whenReleased(new Runnable() {
+            public void run() {
+                try {
+                    MIDletSuiteUtils.executeWithArgs(MIDletSuite.INTERNAL_SUITE_ID,
+                        AppManagerPeer.INSTALLER, label, "I", url, label);
+                } catch (Throwable t) {
+                    displayError.showErrorAlert(label, t, null, null, shell);
+                }
+            }
+        });
     }
 
     void launchCaManager() {
-        manager.launchCaManager();
+        shell.whenReleased(new Runnable() {
+            public void run() { manager.launchCaManager(); }
+        });
     }
 
     void launchComponentManager() {
-        manager.launchComponentManager();
+        shell.whenReleased(new Runnable() {
+            public void run() { manager.launchComponentManager(); }
+        });
     }
 
     /** Open a suite: foreground if running, launch if single, choose if several. */
@@ -132,7 +157,9 @@ class AppManagerUIImpl implements AppManagerUI, CommandListener {
             } else if (AppManagerPeer.COMP_MANAGER.equals(si.midletToRun)) {
                 launchComponentManager();
             } else if (AppManagerPeer.ODT_AGENT.equals(si.midletToRun)) {
-                manager.launchODTAgent();
+                shell.whenReleased(new Runnable() {
+                    public void run() { manager.launchODTAgent(); }
+                });
             }
             return;
         }
@@ -147,22 +174,28 @@ class AppManagerUIImpl implements AppManagerUI, CommandListener {
         }
     }
 
-    void launch(RunningMIDletSuiteInfo si, String className) {
-        try {
-            if (si.getProxyFor(className) != null) {
-                manager.moveToForeground(si, className);
-            } else {
-                manager.launchSuite(si, className);
+    void launch(final RunningMIDletSuiteInfo si, final String className) {
+        shell.whenReleased(new Runnable() {
+            public void run() {
+                try {
+                    if (si.getProxyFor(className) != null) {
+                        manager.moveToForeground(si, className);
+                    } else {
+                        manager.launchSuite(si, className);
+                    }
+                } catch (Throwable t) {
+                    displayError.showErrorAlert(si.displayName, t, null, null, shell);
+                }
             }
-        } catch (Throwable t) {
-            displayError.showErrorAlert(si.displayName, t, null, null, shell);
-        }
+        });
     }
 
-    void foreground(MIDletProxy p) {
-        RunningMIDletSuiteInfo si = suiteOf(p);
+    void foreground(final MIDletProxy p) {
+        final RunningMIDletSuiteInfo si = suiteOf(p);
         if (si != null) {
-            manager.moveToForeground(si, p.getClassName());
+            shell.whenReleased(new Runnable() {
+                public void run() { manager.moveToForeground(si, p.getClassName()); }
+            });
         }
     }
 

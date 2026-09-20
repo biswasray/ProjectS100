@@ -9,6 +9,9 @@
 # MIDletSelector used by MIDletSuiteLauncher, SplashScreen) are taken
 # from the reference directory; only AppManagerUIImpl is replaced.
 #
+# Sys.java has natives (native/s100_native.c) that the romizer resolves at
+# link time, so the .c file is added to the AMS native list below.
+#
 
 S100_AMS_UI_DIR = $(AMS_APPMANAGER_UI_IMPL_DIR)
 S100_AMS_UI_REF_DIR = $(AMS_APPMANAGER_UI_DIR)/reference
@@ -22,11 +25,15 @@ SUBSYSTEM_AMS_JAVA_FILES += \
     $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/AppManagerUIImpl.java \
     $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/AppsMenu.java \
     $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/CallLog.java \
+    $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/Camera.java \
     $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/Clock.java \
+    $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/Connectivity.java \
     $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/Contacts.java \
     $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/DialerScreen.java \
+    $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/FileManager.java \
     $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/HomeScreen.java \
     $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/Icons.java \
+    $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/ImageViewScreen.java \
     $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/Keymap.java \
     $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/ListScreen.java \
     $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/MenuItem.java \
@@ -40,9 +47,21 @@ SUBSYSTEM_AMS_JAVA_FILES += \
     $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/SettingsMenu.java \
     $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/Shell.java \
     $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/StatusBar.java \
+    $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/Sys.java \
     $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/SysInfo.java \
     $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/TextInputScreen.java \
     $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/TextViewScreen.java \
     $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/Theme.java
 
 MIDP_JAVADOC_SOURCEPATH += $(S100_AMS_UI_DIR)/classes
+
+# Native side of Sys.java (file system, processes, camera frames, JPEG,
+# AVI recorder); the IJG decoder comes from JPEG_DIR when USE_JPEG=true.
+vpath % $(S100_AMS_UI_DIR)/native
+
+SUBSYSTEM_AMS_NATIVE_FILES += \
+    s100_native.c
+
+ifeq ($(USE_JPEG), true)
+SUBSYSTEM_AMS_EXTRA_INCLUDES += -I$(JPEG_DIR)
+endif

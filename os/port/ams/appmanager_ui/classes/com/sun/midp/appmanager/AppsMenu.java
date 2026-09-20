@@ -3,7 +3,11 @@
  *
  *   Collection        installed MIDlet suites: Open, Details, Update,
  *                     Application settings, Delete
- *   Install           the graphical installer (DiscoveryApp)
+ *   Install           the graphical installer (DiscoveryApp, from a URL)
+ *   Install from file the package installer: pick a .jad/.jar in the
+ *                     file manager, GraphicalInstaller does the rest
+ *   File manager      FileManager.java
+ *   Album             the camera's pictures and clips (Camera.java)
  *   Running           MIDlets currently running: Foreground, End
  *   Certificates      CA manager (when built in)
  *
@@ -32,6 +36,12 @@ class AppsMenu {
             new Runnable() {
                 public void run() { shell.ams.install(); }
             }));
+        v.addElement(new MenuItem("applications.installfile", "Install from file", "installfile",
+            new Runnable() {
+                public void run() { installFromFile(); }
+            }));
+        v.addElement(shell.menus.files.item());
+        v.addElement(shell.menus.camera.albumItem());
         v.addElement(new MenuItem("applications.running", "Running applications", "running",
             new Runnable() {
                 public void run() { shell.push(new RunningScreen()); }
@@ -51,6 +61,15 @@ class AppsMenu {
         MenuItem[] out = new MenuItem[v.size()];
         v.copyInto(out);
         return out;
+    }
+
+    /** The package installer's file picker: any .jad/.jar on the phone. */
+    void installFromFile() {
+        shell.menus.files.pick(FileManager.PACKAGE_EXTS, new FileManager.PickListener() {
+            public void onPick(String path) {
+                shell.menus.files.install(path);
+            }
+        });
     }
 
     /** Installed suites (the AMS list without the internal tools). */

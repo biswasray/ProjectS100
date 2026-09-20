@@ -98,7 +98,14 @@ b2g_stop() {
     [ -n "$J2ME_KEEP_B2G" ] && return
     # b2g is the KaiOS compositor + Gecko; stopping it releases fb0 and evdev
     stop b2g 2>/dev/null
-    # give surfaceflinger-less panels a moment, then make sure it is lit
+    # Wait until every b2g process is really gone: when the last one releases
+    # fb0 the mdss driver powers the panel down, and if that happens after
+    # runMidlet has already unblanked it the LCD stays dark (panel_status=dead,
+    # fb0 reads fail with EPERM) while the shell runs blind.
+    i=0
+    while [ $i -lt 40 ] && ps | grep -v grep | grep -q '/system/b2g/b2g'; do
+        sleep 0.5; i=$((i + 1))
+    done
     sleep 1
     echo 0 > /sys/class/graphics/fb0/blank 2>/dev/null
     # Turn the backlight on: KaiOS usually left it at 0 (screen timed out).

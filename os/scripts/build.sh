@@ -8,7 +8,8 @@
 #   sync     mirror os/phoneME into WSL's own filesystem (see WORK below)
 #   pcsl     Portable C Standard Library  -> $WORK/build/pcsl/linux_arm/{lib,inc}
 #   cldc     CLDC HotSpot VM (romized)    -> $WORK/build/cldc/linux_arm_vfp/dist
-#   midp     MIDP + jiophone fb port + S100 shell (os/port) -> $WORK/build/midp/{bin/arm,lib}
+#   midp     MIDP + jiophone fb port + S100 shell (os/port, with its native
+#            helper and the IJG JPEG decoder) -> $WORK/build/midp/{bin/arm,lib}
 #   package  static ARM binaries + config + device scripts -> os/out/j2me/
 #   clean    remove $WORK/build
 #
@@ -63,7 +64,7 @@ sync_sources() {
     # os/port holds the parts of the port that are plain files rather than
     # patches: the S100 (Series 40 style) AMS shell and its icons
     rsync -a --delete "$OS_DIR/port/" "$PORT_SRC/"
-    find "$PORT_SRC" -type f \( -name '*.java' -o -name '*.gmk' \) -exec sed -i 's/\r$//' {} +
+    find "$PORT_SRC" -type f \( -name '*.java' -o -name '*.gmk' -o -name '*.c' -o -name '*.h' \) -exec sed -i 's/\r$//' {} +
     ok "sources in sync"
 }
 
@@ -142,6 +143,7 @@ build_midp() {
         CPU=arm TARGET_DEVICE=jiophone \
         USE_MULTIPLE_ISOLATES=true \
         USE_COMPILATION_WARNINGS=true \
+        USE_JPEG=true JPEG_DIR="$SRC/jpeg" \
         S100_PORT_DIR="$PORT_SRC" \
         AMS_APPMANAGER_UI_IMPL_DIR="$PORT_SRC/ams/appmanager_ui" \
         APPMANAGER_UI_RESOURCE_ADITIONAL_COMPONENTS="$PORT_SRC/ams/icons/lib.gmk" \
@@ -175,12 +177,15 @@ package() {
     # holds the installed suites
     cp -r "$MIDP_OUTPUT_DIR/lib/." "$OUT_DIR/lib/"
     cp -r "$MIDP_OUTPUT_DIR/appdb/." "$OUT_DIR/appdb/"
-    # device side: launcher, keymap, keypad probe, group-su helper
-    cp "$OS_DIR/device/j2me.sh" "$OS_DIR/device/keymap.txt" "$OUT_DIR/"
+    # device side: launcher, keymap, shell helper scripts, keypad probe,
+    # group-su helper
+    cp "$OS_DIR/device/j2me.sh" "$OS_DIR/device/keymap.txt" \
+       "$OS_DIR/device/s100_net.sh" "$OS_DIR/device/s100_cam.sh" "$OUT_DIR/"
+    sed -i 's/\r$//' "$OUT_DIR"/*.sh
     "${CROSS}gcc" -static -O2 -o "$OUT_DIR/bin/keyprobe" "$OS_DIR/device/keyprobe.c"
     "${CROSS}gcc" -static -O2 -o "$OUT_DIR/bin/gsu" "$OS_DIR/device/gsu.c"
     "${CROSS}strip" "$OUT_DIR/bin/keyprobe" "$OUT_DIR/bin/gsu"
-    chmod 755 "$OUT_DIR"/bin/* "$OUT_DIR/j2me.sh"
+    chmod 755 "$OUT_DIR"/bin/* "$OUT_DIR"/*.sh
     # sanity: everything that runs on the phone must be static
     for f in "$OUT_DIR"/bin/*; do
         file "$f" | grep -q "statically linked" || die "$f is not statically linked"

@@ -18,8 +18,20 @@ os/port/
       Messaging.java  Contacts.java  CallLog.java  SettingsMenu.java  Organiser.java  AppsMenu.java
       DialerScreen.java  TextInputScreen.java  ListScreen.java  TextViewScreen.java  Popup.java
       Theme.java  Icons.java  StatusBar.java  Clock.java  Prefs.java  SysInfo.java
-  ams/icons/                       40x40 PNG menu icons (+ gen_icons.py that draws them, lib.gmk)
+      Camera.java                  viewfinder, photo/video capture, album, camera settings
+      FileManager.java             phone memory / memory card browser, package installer entry
+      ImageViewScreen.java         JPEG (native, scaled) and PNG/GIF viewer
+      Connectivity.java            Settings > Connectivity: Bluetooth, Wi-Fi, Hotspot, USB
+      Sys.java                     files, processes, camera frames: the Java side of the native helper
+  ams/appmanager_ui/native/s100_native.c   KNI natives behind Sys.java (see below)
+  ams/icons/                       40x40 PNG menu icons and 20x20 file icons (+ gen_icons.py, lib.gmk)
 ```
+
+Two helper scripts live on the phone next to `j2me.sh` (from `os/device/`):
+`s100_net.sh` (Wi-Fi/hotspot/USB/Bluetooth, driven through `wpa_cli`,
+`ndc` and `setprop`) and `s100_cam.sh` (runs Qualcomm's `mm-qcamera-app`
+for the camera). They are plain shell scripts and can be fixed on the
+device without rebuilding.
 
 ## What it looks like / does
 
@@ -30,9 +42,15 @@ os/port/
 | **Messaging** — Create message, Inbox, Drafts, Outbox, Sent items | multitap editor; Send files to Outbox (no SMS stack in this build) |
 | **Contacts** — Names, Add new, Memory status, Delete all | keypad letters jump in the list; Options: Call, Send message, Edit, Delete |
 | **Log** — Missed, Received, Dialled, Clear | Dialled is fed by the dialer |
-| **Settings** — Profiles, Display (menu view, wallpaper, idle text), Date and time (format, time zone), My shortcuts, Phone (info, memory, key map, factory reset), Exit to KaiOS | |
+| **Settings** — Profiles, Display (menu view, wallpaper, idle text), **Connectivity** (below), Date and time (format, time zone), My shortcuts, Phone (info, memory, key map, factory reset), Exit to KaiOS | |
+| **Settings > Connectivity > Wi-Fi** — on/off, status, available networks (scan, join with password), saved networks (connect, forget), details (IP, gateway, DNS, signal, MAC) | joins run in the background behind a "please wait" note |
+| **Settings > Connectivity > Hotspot** — on/off, network name, WPA2/open, password, channel, connected devices | uses netd's soft AP + tethering (hostapd, dnsmasq); Internet sharing needs a mobile data connection (upstream `rmnet_data0`) |
+| **Settings > Connectivity > USB** — mode (MTP, mass storage of the memory card, charging only), USB debugging on/off, cable state | sets `sys.usb.config`; MTP file transfer itself needs KaiOS's media server |
+| **Settings > Connectivity > Bluetooth** — on/off (radio + firmware), phone name, visibility | pairing is not available: the Bluedroid stack runs inside KaiOS's `bluetoothd`, which only Gecko drives |
 | **Organiser** — Calculator, Stopwatch, Notes | calculator: `*` cycles + − × ÷, `#` decimal, centre = equals |
-| **Applications** — Collection (installed suites: Open, Details, Update, Application settings, Delete), Install application, Running applications (Foreground, End), Certificates | this is the old "Java MIDlets" app manager |
+| **Applications** — Collection (installed suites: Open, Details, Update, Application settings, Delete), Install application (URL), **Install from file** (pick a .jad/.jar), **File manager**, **Album**, Running applications (Foreground, End), Certificates | this is the old "Java MIDlets" app manager plus the file side |
+| **File manager** — Phone memory (`/storage/emulated/0`), Memory card (when mounted), Java runtime (`/data/j2me`) | Options: Open, Details, New folder, Rename, Copy, Move, Paste here, Delete, Install (for .jad/.jar). Files open by extension: pictures → viewer (Left/Right = next/previous), text/log/xml/jad → text view, .jad/.jar → package installer, audio/video → info only (no player in Java mode) |
+| **Camera** — viewfinder (~8 fps), Photo / Video modes, back/front camera, album, settings (photo size 1 MP or VGA, quality, video sound, save to phone/card, rotation, mirror, colour format) | centre = capture / start-stop recording, left soft = Options, Left/Right = mode, `*` = switch camera. Photos: `DCIM/Camera/IMG_<stamp>.jpg` (1 MP via a 5 s snapshot, VGA instantly from the preview). Video: `VID_<stamp>.avi`, Motion-JPEG 240x320 @ 10 fps, optional 48 kHz mono sound from the microphone |
 
 Contacts, messages, notes, the call log and settings are RMS record stores
 of the internal suite (`s100_*`), i.e. files under `/data/j2me/appdb/`.
@@ -49,6 +67,42 @@ reference class did. `lib.gmk` swaps only `AppManagerUIImpl.java`; the
 reference `AppInfo`, `AppSettingsUIImpl`, `MIDletSelector` and
 `SplashScreen` are still compiled from `midp/src/ams/appmanager_ui/reference`.
 
+### The native helper (`native/s100_native.c`)
+
+`Sys.java` declares a handful of KNI natives that the AMS makefile compiles
+from `native/s100_native.c` (romized classes resolve natives at link time,
+so the file is simply added to `SUBSYSTEM_AMS_NATIVE_FILES` in `lib.gmk`):
+
+- directory listing (`opendir`), `stat`, mkdir/unlink/rename/copy, `statfs`;
+- `exec` (fork + `sh -c`, output captured, with a timeout — it blocks the
+  whole VM, so the Java side keeps it for sub-second queries), `spawn`
+  (detached session, returns the pid), `alive`, `kill` (the whole process
+  group). `Sys.run()` builds a polled background job on top of `spawn`;
+- camera: YV12/I420/NV21/NV12 frame file → RGB ints for `Graphics.drawRGB` (rotate,
+  mirror, fill-and-crop scaling), frame file → baseline 4:2:0 JPEG (own
+  encoder, standard tables), and a Motion-JPEG AVI recorder on a pthread
+  that re-reads the preview dump at the requested frame rate and appends an
+  optional WAV as one audio chunk;
+- `jpegDecode`: the IJG decoder (`USE_JPEG=true`, `JPEG_DIR=phoneME/jpeg`,
+  which also makes `Image.createImage` understand JPEG) with DCT scaling
+  1/2–1/8 so a 1280x960 photo is decoded straight into a 320x240 buffer.
+
+`os/scripts/check_native.sh` builds the file as a host program
+(`-DS100_HOST_TEST`) and writes a test JPEG and AVI into `os/out/`.
+
+### How the camera works on the JioPhone
+
+The sensors are behind Qualcomm's `mm-qcamera-daemon`; the only client we
+can drive without Gecko is the factory test tool `/system/bin/mm-qcamera-app`
+(this ODM build reads one key from stdin: `2`/`3` back/front preview,
+dumping every 640x480 frame (planar YV12: Y, V, U planes) to
+`/data/back.yuv`/`front.yuv`; `4`/`5`
+take a 1280x960 snapshot to `/data/camera_snap.yuv` and exit).
+`s100_cam.sh preview` keeps it running until the Java side kills the
+process group; the viewfinder timer converts the dump file eight times a
+second. Frames are landscape from the sensor, hence the rotation settings
+(back 90°, front 270° + mirror by default).
+
 Two small things live outside this directory:
 
 - `midp/src/highlevelui/fb_application/reference/native/fbapp_export.c`
@@ -58,6 +112,9 @@ Two small things live outside this directory:
 - `os/device/j2me.sh`: exports `TZ` (from `appdb/s100_tz.txt`, KaiOS's
   `persist.sys.timezone`, or IST) because the static glibc binary has no
   zoneinfo and would otherwise show UTC.
+- `os/device/s100_net.sh`, `os/device/s100_cam.sh`: the connectivity and
+  camera backends (see above); `build.sh package` copies them next to
+  `j2me.sh`.
 
 ## Limits of the font
 
@@ -71,6 +128,10 @@ fancier needs a real font renderer in `gxjport_text.c`.
 ```bash
 # fast type check (5 s) against the last MIDP build, before the 10 min rebuild
 wsl -d Ubuntu-24.04 -- bash os/scripts/check_port.sh
+# host build + self test of the native helper (JPEG/AVI/exec)
+wsl -d Ubuntu-24.04 -- bash os/scripts/check_native.sh
+# after editing Java sources with non-ASCII text: escape it as \uXXXX
+python os/scripts/asciify.py
 
 # rebuild + package, then emulate or deploy
 wsl -d Ubuntu-24.04 -- bash os/scripts/build.sh midp package

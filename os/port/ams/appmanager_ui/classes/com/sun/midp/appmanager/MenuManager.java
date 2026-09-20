@@ -2,7 +2,7 @@
  * S100 shell - the menu tree and how to get around it.
  *
  * Builds the Nokia-style main menu (Messaging, Contacts, Log, Settings,
- * Organiser, Applications) from the feature modules, opens items
+ * Organiser, Applications, Camera) from the feature modules, opens items
  * (submenu -> MenuScreen, leaf -> action) and resolves the ids that the
  * idle-screen shortcuts (Keymap) and openId() use.
  */
@@ -19,6 +19,9 @@ class MenuManager {
     final SettingsMenu settings;
     final Organiser organiser;
     final AppsMenu apps;
+    final Camera camera;
+    final FileManager files;
+    final Connectivity connectivity;
 
     private MenuItem root;
 
@@ -30,6 +33,9 @@ class MenuManager {
         settings = new SettingsMenu(shell);
         organiser = new Organiser(shell);
         apps = new AppsMenu(shell);
+        camera = new Camera(shell);
+        files = new FileManager(shell);
+        connectivity = new Connectivity(shell);
     }
 
     MenuItem root() {
@@ -41,6 +47,7 @@ class MenuManager {
                 new MenuItem("settings", "Settings", "settings", settings.items()),
                 new MenuItem("organiser", "Organiser", "organiser", organiser.items()),
                 new MenuItem("applications", "Applications", "applications", apps.items()),
+                camera.item(),
             });
         }
         return root;

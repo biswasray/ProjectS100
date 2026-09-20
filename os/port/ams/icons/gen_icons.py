@@ -9,6 +9,7 @@ loaded by Icons.java); rerun `python gen_icons.py` after editing.
 import math
 import os
 import struct
+import sys
 import zlib
 
 SIZE = 40          # output icon size
@@ -17,19 +18,27 @@ N = SIZE * S
 
 
 class Canvas:
-    def __init__(self, n=N):
+    """Drawings are always in 0..40 icon units; `out` is the pixel size of
+    the PNG (40 for menu icons, 20 for the list-row icons of the file
+    manager)."""
+
+    def __init__(self, out=SIZE):
+        self.out = out
+        n = out * S
         self.n = n
+        self.unit = SIZE / out
         self.px = [[[0.0, 0.0, 0.0, 0.0] for _ in range(n)] for _ in range(n)]
 
     def paint(self, pred, color, alpha=1.0):
         """Composite `color` (0-255 rgb) wherever pred(x, y) holds (x, y in icon units)."""
         r, g, b = [c / 255.0 for c in color]
         n = self.n
+        u = self.unit
         for j in range(n):
-            y = (j + 0.5) / S
+            y = (j + 0.5) / S * u
             row = self.px[j]
             for i in range(n):
-                x = (i + 0.5) / S
+                x = (i + 0.5) / S * u
                 if pred(x, y):
                     d = row[i]
                     a = alpha
@@ -40,9 +49,9 @@ class Canvas:
 
     def downsample(self):
         out = []
-        for j in range(SIZE):
+        for j in range(self.out):
             row = []
-            for i in range(SIZE):
+            for i in range(self.out):
                 r = g = b = a = 0.0
                 for dj in range(S):
                     for di in range(S):
@@ -375,7 +384,185 @@ def icon_compose(c):
     c.paint(rotate(rect(28, 12, 6, 4), 31, 24, 40), RED)
 
 
+# ---- camera, file manager, connectivity ------------------------------------
+
+def icon_camera(c):
+    body = rrect(4, 11, 32, 23, 3)
+    shadow(c, body)
+    c.paint(body, GREY_D)
+    c.paint(rrect(13, 7, 12, 6, 1.5), GREY_D)           # viewfinder hump
+    c.paint(rect(4, 15, 32, 3), GREY)
+    c.paint(circle(22, 23, 8), GREY_L)
+    c.paint(circle(22, 23, 6.2), BLUE_D)
+    c.paint(circle(22, 23, 3.8), BLUE)
+    c.paint(circle(20, 21, 1.4), WHITE)
+    c.paint(rrect(7, 18, 5, 3, 1), YELLOW)              # flash window
+
+
+def icon_files(c):
+    back = poly([(5, 9), (16, 9), (19, 12), (35, 12), (35, 33), (5, 33)])
+    shadow(c, back)
+    c.paint(back, ORANGE)
+    c.paint(poly([(5, 15), (35, 15), (35, 33), (5, 33)]), YELLOW)
+    c.paint(rrect(18, 20, 12, 3, 1), (230, 200, 90))
+
+
+def icon_album(c):
+    frame = rrect(5, 7, 30, 26, 2)
+    shadow(c, frame)
+    c.paint(frame, WHITE)
+    c.paint(minus(frame, rrect(6.5, 8.5, 27, 23, 1.5)), GREY)
+    c.paint(rect(7, 9, 26, 22), (150, 200, 250))
+    c.paint(poly([(7, 31), (16, 19), (22, 26), (26, 22), (33, 31)]), GREEN)
+    c.paint(circle(27, 14, 3), YELLOW)
+
+
+def icon_video(c):
+    body = rrect(4, 12, 24, 17, 3)
+    shadow(c, body)
+    c.paint(body, GREY_D)
+    c.paint(poly([(28, 17), (36, 12), (36, 29), (28, 24)]), GREY_D)
+    c.paint(circle(13, 20.5, 5), GREY_L)
+    c.paint(circle(13, 20.5, 3), BLUE)
+    c.paint(circle(22, 16, 1.6), RED)
+
+
+def half_ring_up(cx, cy, r, w):
+    """Upper half of a ring (an arc opening downwards)."""
+    return minus(ring(cx, cy, r - w, r), rect(0, cy, 40, 40))
+
+
+def icon_connectivity(c):
+    c.paint(circle(20, 20, 15), BLUE_D)
+    c.paint(circle(20, 20, 13.5), BLUE)
+    c.paint(half_ring_up(20, 26, 11, 2), WHITE)
+    c.paint(half_ring_up(20, 26, 7, 2), WHITE)
+    c.paint(circle(20, 26, 2.6), WHITE)
+
+
+def icon_wifi(c):
+    sides = union(poly([(0, 0), (20, 31), (0, 40)]), poly([(40, 0), (20, 31), (40, 40)]))
+    for r in (16, 11, 6):
+        wedge = minus(half_ring_up(20, 31, r, 3), sides)
+        shadow(c, wedge)
+        c.paint(wedge, BLUE)
+    c.paint(circle(20, 31, 2.8), BLUE_D)
+
+
+def icon_bluetooth(c):
+    c.paint(circle(20, 20, 15), BLUE_D)
+    c.paint(circle(20, 20, 13.5), BLUE)
+    rune = union(line(20, 8, 20, 32, 2.2), line(20, 8, 27, 14, 2.2), line(27, 14, 13, 26, 2.2),
+                 line(20, 32, 27, 26, 2.2), line(27, 26, 13, 14, 2.2))
+    c.paint(rune, WHITE)
+
+
+def icon_hotspot(c):
+    # two arcs on each side of a small mast
+    for r in (9, 14):
+        rg = ring(20, 22, r - 2.2, r)
+        left = minus(rg, poly([(20, 22), (30, 0), (40, 0), (40, 40), (30, 44)]))
+        left = minus(left, poly([(20, 22), (10, 0), (0, 0), (0, 44), (10, 44)]))
+        c.paint(minus(rg, union(poly([(20, 22), (8, 0), (32, 0)]), poly([(20, 22), (8, 44), (32, 44)]))), BLUE)
+    c.paint(circle(20, 22, 3.5), BLUE_D)
+    c.paint(rect(18.6, 24, 2.8, 12), GREY_D)
+
+
+def icon_usb(c):
+    plug = rrect(13, 4, 14, 12, 1.5)
+    shadow(c, plug)
+    c.paint(plug, GREY_L)
+    c.paint(minus(plug, rrect(14.5, 5.5, 11, 9, 1)), GREY_D)
+    c.paint(union(rrect(16, 7.5, 3, 2, 0.5), rrect(21, 7.5, 3, 2, 0.5)), GREY_D)
+    body = rrect(11, 16, 18, 20, 2.5)
+    shadow(c, body)
+    c.paint(body, GREY_D)
+    c.paint(union(line(20, 18, 20, 33, 2), circle(20, 33, 2.4), line(20, 26, 14, 22, 1.8),
+                  line(20, 29, 26, 25, 1.8), circle(14, 22, 1.8), rect(24.5, 22.5, 3, 3)), WHITE)
+
+
+def icon_installfile(c):
+    page = rrect(9, 4, 22, 28, 2)
+    shadow(c, page)
+    c.paint(page, WHITE)
+    c.paint(minus(page, rrect(10.2, 5.2, 19.6, 25.6, 1.5)), GREY)
+    c.paint(union(rrect(13, 9, 14, 1.6, 0.8), rrect(13, 13, 10, 1.6, 0.8)), GREY_D)
+    c.paint(circle(27, 28, 8.5), GREEN_D)
+    c.paint(circle(27, 28, 7), GREEN)
+    c.paint(union(rect(25.5, 22.5, 3, 7), poly([(22, 28), (32, 28), (27, 33.5)])), WHITE)
+
+
+# 20 px row icons for the file manager (drawn in the same 40-unit space)
+
+def icon_folder(c):
+    back = poly([(3, 8), (16, 8), (19, 12), (37, 12), (37, 34), (3, 34)])
+    c.paint(back, ORANGE)
+    c.paint(poly([(3, 16), (37, 16), (37, 34), (3, 34)]), YELLOW)
+
+
+def icon_file(c):
+    page = poly([(8, 3), (26, 3), (33, 10), (33, 37), (8, 37)])
+    c.paint(page, WHITE)
+    c.paint(minus(page, poly([(10, 5), (25, 5), (31, 11), (31, 35), (10, 35)])), GREY_D)
+    c.paint(poly([(26, 3), (33, 10), (26, 10)]), GREY_L)
+
+
+def icon_file_image(c):
+    icon_file(c)
+    c.paint(rect(12, 16, 17, 15), (150, 200, 250))
+    c.paint(poly([(12, 31), (18, 22), (22, 27), (25, 24), (29, 31)]), GREEN)
+    c.paint(circle(24, 19, 2), YELLOW)
+
+
+def icon_file_audio(c):
+    icon_file(c)
+    c.paint(union(rect(20, 14, 2.5, 14), rect(20, 14, 9, 2.5), circle(18, 28, 4),
+                  rect(27, 14, 2.5, 8), circle(25, 22, 4)), BLUE)
+
+
+def icon_file_video(c):
+    icon_file(c)
+    c.paint(rrect(11, 15, 13, 12, 1.5), BLUE)
+    c.paint(poly([(24, 18), (30, 15), (30, 27), (24, 24)]), BLUE)
+    c.paint(poly([(15, 18), (21, 21), (15, 24)]), WHITE)
+
+
+def icon_file_java(c):
+    icon_file(c)
+    c.paint(circle(20, 22, 8.5), ORANGE)
+    c.paint(circle(20, 22, 7), RED)
+    c.paint(union(rect(18.5, 17, 3, 8), poly([(15, 24), (25, 24), (20, 29)])), WHITE)
+
+
+def icon_file_text(c):
+    icon_file(c)
+    for i in range(4):
+        c.paint(rect(12, 15 + i * 5, 17 - (i == 3) * 8, 2), GREY_D)
+
+
+SMALL_ICONS = {
+    "s100_folder": 20, "s100_file": 20, "s100_file_image": 20, "s100_file_audio": 20,
+    "s100_file_video": 20, "s100_file_java": 20, "s100_file_text": 20,
+}
+
 ICONS = {
+    "s100_camera": icon_camera,
+    "s100_files": icon_files,
+    "s100_album": icon_album,
+    "s100_video": icon_video,
+    "s100_connectivity": icon_connectivity,
+    "s100_wifi": icon_wifi,
+    "s100_bluetooth": icon_bluetooth,
+    "s100_hotspot": icon_hotspot,
+    "s100_usb": icon_usb,
+    "s100_installfile": icon_installfile,
+    "s100_folder": icon_folder,
+    "s100_file": icon_file,
+    "s100_file_image": icon_file_image,
+    "s100_file_audio": icon_file_audio,
+    "s100_file_video": icon_file_video,
+    "s100_file_java": icon_file_java,
+    "s100_file_text": icon_file_text,
     "s100_messaging": icon_messaging,
     "s100_contacts": icon_contacts,
     "s100_log": icon_log,
@@ -401,11 +588,13 @@ ICONS = {
 
 
 def write_png(path, rows):
+    size = len(rows)
+
     def chunk(tag, data):
         c = struct.pack(">I", len(data)) + tag + data
         return c + struct.pack(">I", zlib.crc32(tag + data) & 0xffffffff)
     raw = b"".join(b"\x00" + bytes(v for p in row for v in p) for row in rows)
-    png = (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", SIZE, SIZE, 8, 6, 0, 0, 0))
+    png = (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", size, size, 8, 6, 0, 0, 0))
            + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b""))
     with open(path, "wb") as f:
         f.write(png)
@@ -413,8 +602,11 @@ def write_png(path, rows):
 
 def main():
     here = os.path.dirname(os.path.abspath(__file__))
+    only = sys.argv[1:]          # optional icon names to (re)draw
     for name, fn in ICONS.items():
-        c = Canvas()
+        if only and name not in only:
+            continue
+        c = Canvas(SMALL_ICONS.get(name, SIZE))
         fn(c)
         write_png(os.path.join(here, name + ".png"), c.downsample())
         print("wrote", name + ".png")

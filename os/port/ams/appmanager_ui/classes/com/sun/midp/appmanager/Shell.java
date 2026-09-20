@@ -29,6 +29,8 @@ class Shell extends Canvas {
     private TimerTask minuteTask;
     private int heldKey = Keymap.NONE;
     private boolean longFired;
+    /** Action waiting for the current key to be released (see whenReleased). */
+    private Runnable afterRelease;
 
     Shell(Display display, AppManagerUIImpl ams) {
         this.display = display;
@@ -220,6 +222,36 @@ class Shell extends Canvas {
 
     protected void keyReleased(int code) {
         cancelLongPress();
+        Runnable r = afterRelease;
+        afterRelease = null;
+        if (r != null) {
+            r.run();
+        }
+    }
+
+    /**
+     * Runs r once the key that is currently held has been released (at
+     * once if none is). The shell acts on key presses; anything that
+     * brings another MIDlet to the foreground must wait for the release,
+     * or that release lands in the new MIDlet where Chameleon fires soft
+     * key commands on release - the installer, for instance, saw the
+     * release of our "Install" as its "Stop".
+     */
+    void whenReleased(final Runnable r) {
+        if (heldKey == Keymap.NONE) {
+            r.run();
+            return;
+        }
+        afterRelease = r;
+        // the release can get lost (focus change): run it anyway shortly
+        later(new Runnable() {
+            public void run() {
+                if (afterRelease == r) {
+                    afterRelease = null;
+                    r.run();
+                }
+            }
+        }, 700);
     }
 
     private void armLongPress(final int k) {

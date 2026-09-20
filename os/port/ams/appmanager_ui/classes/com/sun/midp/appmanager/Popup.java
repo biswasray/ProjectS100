@@ -20,6 +20,8 @@ class Popup {
     static final int INFO = 0;
     static final int CONFIRM = 1;
     static final int MENU = 2;
+    /** A "please wait" note that keys cannot dismiss; closed by the caller. */
+    static final int WAIT = 3;
 
     Shell shell;
     final int type;
@@ -43,6 +45,12 @@ class Popup {
         if (autoCloseMs > 0) {
             p.autoClose = autoCloseMs;
         }
+        return p;
+    }
+
+    static Popup wait(String text) {
+        Popup p = new Popup(WAIT);
+        p.text = text;
         return p;
     }
 
@@ -101,6 +109,8 @@ class Popup {
 
     void key(int k) {
         switch (type) {
+        case WAIT:
+            break;
         case INFO:
             finish(0);
             break;

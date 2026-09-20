@@ -36,13 +36,13 @@ echo "[*] pushing runtime ($(du -sh "$OUT" | cut -f1)) to $STAGE"
 # adb push runs as shell; /data/local/tmp is the only place it may write
 adb shell "rm -rf $STAGE"
 adb push "$OUT_LOCAL/." "$STAGE" >/dev/null
-adb shell "chmod 755 $STAGE/bin/* $STAGE/j2me.sh"
+adb shell "chmod 755 $STAGE/bin/* $STAGE/*.sh"
 adb shell "/s60su -c '$GSU -c id'" | grep -q "(graphics)" || {
     echo "[x] $GSU did not grant the graphics group" >&2; exit 1; }
 
 echo "[*] installing into $DEST"
 su "mkdir -p $DEST/bin $DEST/lib $DEST/appdb $DEST/tmp && chmod 755 $DEST"
-su "cp -r $STAGE/* $DEST/ && chmod 755 $DEST/bin/* $DEST/j2me.sh"
+su "cp -r $STAGE/* $DEST/ && chmod 755 $DEST/bin/* $DEST/*.sh"
 adb shell "rm -rf $STAGE"
 GSU=$DEST/bin/gsu
 
