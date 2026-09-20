@@ -9,7 +9,9 @@ feels like a J2ME feature phone OS — the phoneME application manager is the
 there.
 
 This is the "much more work" option from the project plan, so read the
-**Status** section before expecting a finished product.
+**Status** section before expecting a finished product. New here? Start with
+[`HOW_TO_START.md`](HOW_TO_START.md) — the step-by-step walkthrough from a
+fresh PC to Java on the phone; this file is the reference behind it.
 
 ```
                  PC (Windows + WSL Ubuntu 24.04)                 JioPhone (rooted boot, adb)
@@ -59,7 +61,8 @@ suite, a built-in MIDlet, and the example MIDlet reporting a key press.*
 
 ```
 os/
-  README.md                 this file
+  README.md                 this file (reference)
+  HOW_TO_START.md           step-by-step walkthrough for a new user
   scripts/
     setup_wsl.sh            apt installs inside WSL (run as root, idempotent)
     fetch_phoneme.sh        clone github.com/magicus/phoneME into os/phoneME + apply patches
