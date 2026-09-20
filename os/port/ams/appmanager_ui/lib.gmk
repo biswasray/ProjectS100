@@ -1,0 +1,48 @@
+#
+# S100 shell - Nokia Series 40 style application manager UI for the
+# JioPhone phoneME port. Selected by build.sh through
+#
+#   AMS_APPMANAGER_UI_IMPL_DIR=<os/port>/ams/appmanager_ui
+#
+# in place of midp/src/ams/appmanager_ui/reference. The reference classes
+# that other AMS code still needs (AppInfo, AppSettingsUIImpl, the
+# MIDletSelector used by MIDletSuiteLauncher, SplashScreen) are taken
+# from the reference directory; only AppManagerUIImpl is replaced.
+#
+
+S100_AMS_UI_DIR = $(AMS_APPMANAGER_UI_IMPL_DIR)
+S100_AMS_UI_REF_DIR = $(AMS_APPMANAGER_UI_DIR)/reference
+
+SUBSYSTEM_AMS_JAVA_FILES += \
+    $(S100_AMS_UI_REF_DIR)/classes/com/sun/midp/appmanager/AppInfo.java \
+    $(S100_AMS_UI_REF_DIR)/classes/com/sun/midp/appmanager/AppSettingsUIImpl.java \
+    $(S100_AMS_UI_REF_DIR)/classes/com/sun/midp/appmanager/MIDletSelector.java \
+    $(S100_AMS_UI_REF_DIR)/classes/com/sun/midp/appmanager/MIDletCustomItem.java \
+    $(S100_AMS_UI_REF_DIR)/classes/com/sun/midp/appmanager/SplashScreen.java \
+    $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/AppManagerUIImpl.java \
+    $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/AppsMenu.java \
+    $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/CallLog.java \
+    $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/Clock.java \
+    $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/Contacts.java \
+    $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/DialerScreen.java \
+    $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/HomeScreen.java \
+    $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/Icons.java \
+    $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/Keymap.java \
+    $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/ListScreen.java \
+    $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/MenuItem.java \
+    $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/MenuManager.java \
+    $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/MenuScreen.java \
+    $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/Messaging.java \
+    $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/Organiser.java \
+    $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/Popup.java \
+    $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/Prefs.java \
+    $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/Screen.java \
+    $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/SettingsMenu.java \
+    $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/Shell.java \
+    $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/StatusBar.java \
+    $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/SysInfo.java \
+    $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/TextInputScreen.java \
+    $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/TextViewScreen.java \
+    $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/Theme.java
+
+MIDP_JAVADOC_SOURCEPATH += $(S100_AMS_UI_DIR)/classes

@@ -8,7 +8,7 @@
 #   sync     mirror os/phoneME into WSL's own filesystem (see WORK below)
 #   pcsl     Portable C Standard Library  -> $WORK/build/pcsl/linux_arm/{lib,inc}
 #   cldc     CLDC HotSpot VM (romized)    -> $WORK/build/cldc/linux_arm_vfp/dist
-#   midp     MIDP + jiophone fb port + AMS -> $WORK/build/midp/{bin/arm,lib}
+#   midp     MIDP + jiophone fb port + S100 shell (os/port) -> $WORK/build/midp/{bin/arm,lib}
 #   package  static ARM binaries + config + device scripts -> os/out/j2me/
 #   clean    remove $WORK/build
 #
@@ -28,6 +28,7 @@ OS_DIR="${OS_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
 PHONEME_SRC="${PHONEME_SRC:-$OS_DIR/phoneME}"
 WORK="${WORK:-$HOME/.cache/s100}"
 SRC="$WORK/phoneME"                 # mirrored sources actually compiled
+PORT_SRC="$WORK/port"               # mirrored os/port (S100 shell UI + icons)
 BUILD_DIR="$WORK/build"
 OUT_DIR="$OS_DIR/out/j2me"
 JDK_DIR="${JDK_DIR:-/usr/lib/jvm/java-8-openjdk-amd64}"
@@ -57,8 +58,12 @@ export JAVA_TOOL_OPTIONS=""
 
 sync_sources() {
     log "mirroring $PHONEME_SRC -> $SRC"
-    mkdir -p "$SRC"
+    mkdir -p "$SRC" "$PORT_SRC"
     rsync -a --delete --exclude .git "$PHONEME_SRC/" "$SRC/"
+    # os/port holds the parts of the port that are plain files rather than
+    # patches: the S100 (Series 40 style) AMS shell and its icons
+    rsync -a --delete "$OS_DIR/port/" "$PORT_SRC/"
+    find "$PORT_SRC" -type f \( -name '*.java' -o -name '*.gmk' \) -exec sed -i 's/\r$//' {} +
     ok "sources in sync"
 }
 
@@ -117,6 +122,13 @@ build_cldc() {
 
 build_midp() {
     log "building MIDP (linux_fb_gcc, TARGET_CPU=arm, TARGET_DEVICE=jiophone)"
+    # The MIDP build never deletes class files it no longer compiles, and
+    # the romizer takes everything in classes/: a stale inner class of a
+    # replaced source (e.g. the reference AppManagerUIImpl$...) then fails
+    # romization with a bare "IllegalAccessError". Start from a clean
+    # classes tree every time; javac recompiles everything anyway.
+    rm -rf "$MIDP_OUTPUT_DIR/classes" "$MIDP_OUTPUT_DIR/classes.zip" \
+           "$MIDP_OUTPUT_DIR/tmpclasses" "$MIDP_OUTPUT_DIR/ROMImage.cpp"
     # The MIDP makefiles are not parallel-safe (generated sources race with
     # their consumers), so this stage runs serially.
     make -C "$SRC/midp/build/linux_fb_gcc" \
@@ -130,7 +142,17 @@ build_midp() {
         CPU=arm TARGET_DEVICE=jiophone \
         USE_MULTIPLE_ISOLATES=true \
         USE_COMPILATION_WARNINGS=true \
-        "$@"
+        S100_PORT_DIR="$PORT_SRC" \
+        AMS_APPMANAGER_UI_IMPL_DIR="$PORT_SRC/ams/appmanager_ui" \
+        APPMANAGER_UI_RESOURCE_ADITIONAL_COMPONENTS="$PORT_SRC/ams/icons/lib.gmk" \
+        "$@" 2>&1 | tee "$BUILD_DIR/midp-build.log"
+    [[ ${PIPESTATUS[0]} -eq 0 ]] || die "midp make failed (see $BUILD_DIR/midp-build.log)"
+    # the ROMImage rule swallows romizer errors and the link then reuses the
+    # previous ROMImage.o: make that a hard failure
+    if grep -q "ROMizing failed" "$BUILD_DIR/midp-build.log"; then
+        die "romizer failed: grep -B5 'ROMizing failed' $BUILD_DIR/midp-build.log"
+    fi
+    [[ -f "$MIDP_OUTPUT_DIR/ROMImage.cpp" ]] || die "ROMImage.cpp was not generated"
     ok "midp -> $MIDP_OUTPUT_DIR"
 }
 

@@ -28,10 +28,15 @@ stopped; when it exits, `b2g` is started again, so the phone is never lost.
                                                     lib/ appdb/   skin, policy, suites
 ```
 
-The user experience on the phone: a blue **"Java MIDlets"** application
-manager is the home screen; you install `.jad/.jar` suites into it and launch
-them with the keypad. Left soft key = menu/Exit, right soft key = Launch/Menu,
-OK = select, power key = END.
+The user experience on the phone is a Nokia Series 40 style shell (the
+**S100 shell**, sources in `os/port/`): an idle screen with the clock and
+"Go to / Menu / Names" soft keys, a 3x2 icon main menu (Messaging, Contacts,
+Log, Settings, Organiser, Applications), a dialer, a multitap text editor
+and the usual submenus. Installed `.jad/.jar` suites appear under
+**Applications > Collection**. Keys: centre = Menu/Select, left soft =
+Go to / Options, right soft = Names / Back, End (power key) = back to the
+idle screen (hold it there to switch off to KaiOS); inside a MIDlet End
+closes the MIDlet. `os/port/README.md` has the full key map.
 
 ---
 
@@ -213,8 +218,8 @@ adb shell "/s60su -c 'tail -n 30 /data/j2me/j2me.log'"     # VM output
 adb shell "/s60su -c 'cat /data/j2me/ams.out'"             # launcher output (should be empty)
 ```
 
-The phone now shows the blue **Java MIDlets** screen and reacts to the
-keypad. `screenshot.sh` renders both fb0 pages (256x640); the top one is
+The phone now shows the idle screen (clock, "Go to / Menu / Names") and
+reacts to the keypad; press the centre key for the main menu. `screenshot.sh` renders both fb0 pages (256x640); the top one is
 normally what is on the panel.
 
 ### 5d. Stop it / get KaiOS back
@@ -223,8 +228,8 @@ normally what is on the panel.
 bash os/scripts/ams_stop.sh           # kills runMidlet, `start b2g`
 ```
 
-Pressing **Exit** (left soft key) in the app manager does the same through
-the launcher's exit trap. Either way `b2g` restarts and **re-enumerates USB,
+**Settings > Exit to KaiOS**, or holding **End** on the idle screen and
+answering "Switch off?", does the same through the launcher's exit trap. Either way `b2g` restarts and **re-enumerates USB,
 so adb disappears for ~5 s** — that is normal, not a reboot.
 
 ---
@@ -266,6 +271,7 @@ b2g — expect the two to fight over the screen), `MIDP_FB_NOPAN=1`,
 |---|---|---|
 | `os/device/j2me.sh`, `keymap.txt` | `build.sh package` | `ams_stop.sh`, `deploy.sh` |
 | `os/device/gsu.c`, `keyprobe.c` | `build.sh package` | same |
+| `os/port/` (the S100 shell: home screen, menus, icons) | `check_port.sh` (5 s type check), then `build.sh midp package` | `ams_stop.sh`, `deploy.sh` (plain files, no patch to refresh) |
 | anything under `os/phoneME/midp/` (port C code, XML config, skin, AMS Java) | `build.sh midp package` | same, then `fetch_phoneme.sh --diff` (patch 0002) |
 | anything under `os/phoneME/cldc/` (VM) | `rebuild_vm.sh` (incremental cldc + MIDP relink + package) | same, then `fetch_phoneme.sh --diff` (patch 0001) |
 | `os/phoneME/pcsl/` | `FORCE=1 build.sh pcsl midp package` | same |
@@ -278,10 +284,12 @@ Where things live inside `os/phoneME/` (see `README.md` for the full list):
 - **device config / look**: `midp/src/configuration/configuration_xml/linux_fb/`
   `constants_jiophone.xml`, `files_jiophone.lst`, `properties.xml`, `skin.xml`;
   splash in `midp/src/ams/appmanager_ui_resources/linux_fb/`
-- **home screen / system apps (Java, romized into runMidlet)**:
-  `midp/src/ams/appmanager_ui/reference/classes/com/sun/midp/appmanager/`
-  (`MVMManager.java` is what `j2me.sh ams` starts, `AppManagerUIImpl.java` is
-  the list you see), installer in `midp/src/ams/installer/`
+- **home screen / menus (Java, romized into runMidlet)**: `os/port/ams/`
+  (not under `os/phoneME/`; see `os/port/README.md`). `MVMManager.java` in
+  `midp/src/ams/jams/mvm/` is what `j2me.sh ams` starts; it creates our
+  `AppManagerUIImpl`, whose `Shell` canvas is everything you see. Installer
+  in `midp/src/ams/installer/`, its icons/splash in
+  `midp/src/ams/appmanager_ui_resources/`
 - **VM**: `cldc/src/vm/cpu/arm/` (JIT/stubs), `cldc/src/vm/os/linux/OS_linux.cpp`
 
 ---

@@ -1,0 +1,323 @@
+/*
+ * S100 shell - the full-screen Canvas every shell screen is drawn on.
+ *
+ * Owns the screen stack (HomeScreen at the bottom), the modal popup, the
+ * status bar and soft key bar, long-press detection and the minute
+ * timer. Everything that touches UI state runs on the LCDUI event thread:
+ * timer callbacks are re-posted with Display.callSerially().
+ */
+
+package com.sun.midp.appmanager;
+
+import java.util.Timer;
+import java.util.TimerTask;
+import java.util.Vector;
+import javax.microedition.lcdui.Canvas;
+import javax.microedition.lcdui.Display;
+import javax.microedition.lcdui.Graphics;
+
+class Shell extends Canvas {
+    final Display display;
+    final AppManagerUIImpl ams;
+    final MenuManager menus;
+
+    private final Vector stack = new Vector();
+    private Popup popup;
+
+    private Timer timer;
+    private TimerTask longPressTask;
+    private TimerTask minuteTask;
+    private int heldKey = Keymap.NONE;
+    private boolean longFired;
+
+    Shell(Display display, AppManagerUIImpl ams) {
+        this.display = display;
+        this.ams = ams;
+        setFullScreenMode(true);
+        menus = new MenuManager(this);
+        push(new HomeScreen());
+    }
+
+    /* ---------------- screen stack ---------------- */
+
+    Screen top() {
+        return (Screen) stack.elementAt(stack.size() - 1);
+    }
+
+    HomeScreen home() {
+        return (HomeScreen) stack.elementAt(0);
+    }
+
+    boolean atHome() {
+        return stack.size() == 1;
+    }
+
+    void push(Screen s) {
+        if (!stack.isEmpty()) {
+            top().onHide();
+        }
+        s.shell = this;
+        stack.addElement(s);
+        s.onShow();
+        repaint();
+    }
+
+    void pop() {
+        if (stack.size() <= 1) {
+            return;
+        }
+        Screen s = top();
+        stack.removeElementAt(stack.size() - 1);
+        s.onHide();
+        top().onShow();
+        repaint();
+    }
+
+    /** Pops everything above s (s stays). */
+    void popTo(Screen s) {
+        while (stack.size() > 1 && top() != s) {
+            pop();
+        }
+    }
+
+    /** Replaces the top screen (used by wizards: input -> result). */
+    void replace(Screen s) {
+        if (stack.size() > 1) {
+            Screen old = top();
+            stack.removeElementAt(stack.size() - 1);
+            old.onHide();
+        }
+        push(s);
+    }
+
+    /** Back to the idle screen, closing any popup. */
+    void goHome() {
+        popup = null;
+        while (stack.size() > 1) {
+            pop();
+        }
+        repaint();
+    }
+
+    /* ---------------- popups ---------------- */
+
+    void showPopup(Popup p) {
+        p.shell = this;
+        popup = p;
+        repaint();
+    }
+
+    void closePopup() {
+        popup = null;
+        repaint();
+    }
+
+    Popup popup() {
+        return popup;
+    }
+
+    void info(String text) {
+        showPopup(Popup.info(text, 1500));
+    }
+
+    /* ---------------- painting ---------------- */
+
+    public void paint(Graphics g) {
+        int w = getWidth(), h = getHeight();
+        Screen s = top();
+        int contentTop;
+        g.setClip(0, 0, w, h);
+        if (s.overlayStatus()) {
+            g.setClip(0, 0, w, h - Theme.SOFT_H);
+            s.paint(g, 0, 0, w, h - Theme.SOFT_H);
+            g.setClip(0, 0, w, h);
+            StatusBar.paint(g, w, true);
+        } else {
+            StatusBar.paint(g, w, false);
+            contentTop = Theme.STATUS_H;
+            if (s.title != null) {
+                Theme.titleBar(g, contentTop, s.title, s.titleRight());
+                contentTop += Theme.TITLE_H;
+            }
+            int ch = h - Theme.SOFT_H - contentTop;
+            g.setColor(Theme.C_BG);
+            g.fillRect(0, contentTop, w, ch);
+            g.setClip(0, contentTop, w, ch);
+            s.paint(g, 0, contentTop, w, ch);
+            g.setClip(0, 0, w, h);
+        }
+        String l, m, r;
+        if (popup != null) {
+            popup.paint(g, w, h - Theme.SOFT_H);
+            l = popup.softLeft();
+            m = popup.softMid();
+            r = popup.softRight();
+        } else {
+            l = s.softLeft();
+            m = s.softMid();
+            r = s.softRight();
+        }
+        paintSoftBar(g, w, h, l, m, r);
+    }
+
+    private void paintSoftBar(Graphics g, int w, int h, String l, String m,
+                              String r) {
+        int y = h - Theme.SOFT_H;
+        g.setColor(Theme.C_SOFT_BG);
+        g.fillRect(0, y, w, Theme.SOFT_H);
+        g.setColor(Theme.C_SOFT_LINE);
+        g.drawLine(0, y, w, y);
+        g.setColor(Theme.C_SOFT_TEXT);
+        int ty = y + (Theme.SOFT_H - Theme.FONT_H) / 2 + 1;
+        if (l != null) {
+            Theme.bold(g, l, Theme.MARGIN, ty, Graphics.TOP | Graphics.LEFT);
+        }
+        if (m != null) {
+            Theme.bold(g, m, w / 2, ty, Graphics.TOP | Graphics.HCENTER);
+        }
+        if (r != null) {
+            Theme.bold(g, r, w - Theme.MARGIN, ty, Graphics.TOP | Graphics.RIGHT);
+        }
+    }
+
+    /* ---------------- keys ---------------- */
+
+    protected void keyPressed(int code) {
+        int k = Keymap.map(code);
+        if (k == Keymap.NONE) {
+            return;
+        }
+        armLongPress(k);
+        if (popup != null) {
+            popup.key(k);
+            return;
+        }
+        Screen s = top();
+        if (s.key(k)) {
+            return;
+        }
+        // shell defaults
+        if (k == Keymap.SOFT_R) {
+            s.back();
+        } else if (k == Keymap.END) {
+            if (!atHome()) {
+                goHome();
+            }
+        }
+    }
+
+    protected void keyRepeated(int code) {
+        int k = Keymap.map(code);
+        if (k == Keymap.NONE) {
+            return;
+        }
+        if (popup != null) {
+            popup.keyRepeat(k);
+        } else {
+            top().keyRepeat(k);
+        }
+    }
+
+    protected void keyReleased(int code) {
+        cancelLongPress();
+    }
+
+    private void armLongPress(final int k) {
+        cancelLongPress();
+        heldKey = k;
+        longFired = false;
+        longPressTask = new TimerTask() {
+            public void run() {
+                display.callSerially(new Runnable() {
+                    public void run() {
+                        if (heldKey == k && !longFired) {
+                            longFired = true;
+                            if (popup != null) {
+                                popup.keyLong(k);
+                            } else {
+                                top().keyLong(k);
+                            }
+                        }
+                    }
+                });
+            }
+        };
+        timer().schedule(longPressTask, Keymap.LONG_PRESS_MS);
+    }
+
+    private void cancelLongPress() {
+        heldKey = Keymap.NONE;
+        if (longPressTask != null) {
+            longPressTask.cancel();
+            longPressTask = null;
+        }
+    }
+
+    /* ---------------- timers ---------------- */
+
+    private synchronized Timer timer() {
+        if (timer == null) {
+            timer = new Timer();
+        }
+        return timer;
+    }
+
+    /** Runs r on the event thread after `ms` milliseconds. */
+    void later(final Runnable r, long ms) {
+        timer().schedule(new TimerTask() {
+            public void run() {
+                display.callSerially(r);
+            }
+        }, ms);
+    }
+
+    /** Repeating timer; returns the task so the caller can cancel it. */
+    TimerTask every(final Runnable r, long periodMs) {
+        TimerTask t = new TimerTask() {
+            public void run() {
+                display.callSerially(r);
+            }
+        };
+        timer().schedule(t, periodMs, periodMs);
+        return t;
+    }
+
+    protected void showNotify() {
+        StatusBar.refresh();
+        long now = System.currentTimeMillis();
+        long toMinute = 60000 - (now % 60000) + 200;
+        if (minuteTask != null) {
+            minuteTask.cancel();
+        }
+        minuteTask = new TimerTask() {
+            public void run() {
+                display.callSerially(new Runnable() {
+                    public void run() {
+                        StatusBar.refresh();
+                        top().tick();
+                        repaint();
+                    }
+                });
+            }
+        };
+        timer().schedule(minuteTask, toMinute, 60000);
+        top().onShow();
+        repaint();
+    }
+
+    protected void hideNotify() {
+        if (minuteTask != null) {
+            minuteTask.cancel();
+            minuteTask = null;
+        }
+        cancelLongPress();
+    }
+
+    /** Makes this canvas current again (after an LCDUI Alert/Form). */
+    void show() {
+        if (display.getCurrent() != this) {
+            display.setCurrent(this);
+        }
+        repaint();
+    }
+}

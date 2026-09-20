@@ -13,6 +13,7 @@
 #   j2me.sh sh                   stop b2g, drop into a shell, restart b2g on exit
 #   J2ME_KEEP_B2G=1 j2me.sh ...  don't stop/start b2g (for debugging over adb
 #                                while KaiOS keeps the screen; expect fighting)
+#   J2ME_TZ="IST-5:30" j2me.sh   POSIX time zone for the VM (see below)
 #
 # Environment understood by the runtime (see os/README.md):
 #   MIDP_FB_DEV, MIDP_KEYPAD_DEV, MIDP_KEYMAP, MIDP_FB_NOPAN, MIDP_FB_DEVICE
@@ -26,6 +27,51 @@ export TMPDIR=${TMPDIR:-$J2ME_HOME/tmp}
 export HOME="$J2ME_HOME"
 # LCD backlight level while Java runs (0-255)
 J2ME_BACKLIGHT=${J2ME_BACKLIGHT:-128}
+
+# Local time. The runtime is a static glibc binary with no zoneinfo files,
+# so it needs a POSIX TZ string or everything shows UTC. Precedence:
+#   1. $J2ME_TZ (POSIX form, e.g. "IST-5:30")
+#   2. appdb/s100_tz.txt, written by Settings > Date and time ("GMT+5:30",
+#      Java sign convention: east of Greenwich is +)
+#   3. KaiOS's persist.sys.timezone (Olson name) for a few common zones
+#   4. India (the JioPhone's home market)
+tz_from_settings() {
+    f=$J2ME_HOME/appdb/s100_tz.txt
+    [ -f "$f" ] || return 1
+    v=$(head -n 1 "$f" 2>/dev/null | tr -d ' \r\n')
+    case "$v" in
+        GMT)  echo "UTC0" ;;
+        GMT+*) echo "UTC-${v#GMT+}" ;;      # POSIX offsets are west-positive
+        GMT-*) echo "UTC+${v#GMT-}" ;;
+        *) return 1 ;;
+    esac
+}
+tz_from_kaios() {
+    z=$(getprop persist.sys.timezone 2>/dev/null)
+    case "$z" in
+        Asia/Kolkata|Asia/Calcutta) echo "IST-5:30" ;;
+        Asia/Dubai)                 echo "GST-4" ;;
+        Asia/Karachi)               echo "PKT-5" ;;
+        Asia/Dhaka)                 echo "BDT-6" ;;
+        Asia/Kathmandu)             echo "NPT-5:45" ;;
+        Asia/Colombo)               echo "IST-5:30" ;;
+        Asia/Singapore|Asia/Kuala_Lumpur) echo "SGT-8" ;;
+        Asia/Shanghai|Asia/Hong_Kong) echo "CST-8" ;;
+        Asia/Tokyo)                 echo "JST-9" ;;
+        Europe/London)              echo "GMT0BST,M3.5.0/1,M10.5.0" ;;
+        Europe/Berlin|Europe/Paris|Europe/Rome|Europe/Madrid|Europe/Amsterdam)
+                                    echo "CET-1CEST,M3.5.0,M10.5.0/3" ;;
+        America/New_York)           echo "EST5EDT,M3.2.0,M11.1.0" ;;
+        America/Chicago)            echo "CST6CDT,M3.2.0,M11.1.0" ;;
+        America/Los_Angeles)        echo "PST8PDT,M3.2.0,M11.1.0" ;;
+        UTC|Etc/UTC|GMT)            echo "UTC0" ;;
+        *) return 1 ;;
+    esac
+}
+if [ -z "$J2ME_TZ" ]; then
+    J2ME_TZ=$(tz_from_settings) || J2ME_TZ=$(tz_from_kaios) || J2ME_TZ="IST-5:30"
+fi
+export TZ="$J2ME_TZ"
 
 cd "$J2ME_HOME" || exit 1
 mkdir -p "$J2ME_HOME/appdb" "$TMPDIR"

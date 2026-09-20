@@ -4,9 +4,10 @@ Sun's **phoneME Feature** (CLDC-HI VM + MIDP 2.1, plain C/C++) cross-compiled
 for the JioPhone LF-2403N and run **directly on `/dev/graphics/fb0` and the
 evdev keypad**, with KaiOS/Gecko (`b2g`) stopped. No browser, no JS VM: the
 Java bytecode runs on a JIT-ing ARM VM and paints straight into the LCD. It
-feels like a J2ME feature phone OS — the phoneME application manager is the
-"home screen", you install `.jad`/`.jar` suites into it and launch them from
-there.
+feels like a J2ME feature phone OS: the **S100 shell** in `os/port/` (a
+Nokia Series 40 style idle screen, icon menu, dialer, contacts, messaging,
+settings, organiser) replaces phoneME's application manager UI, and the
+`.jad`/`.jar` suites you install show up under Applications > Collection.
 
 This is the "much more work" option from the project plan, so read the
 **Status** section before expecting a finished product. New here? Start with
@@ -35,6 +36,7 @@ fresh PC to Java on the phone; this file is the reference behind it.
 | MIDP 2.1 + Chameleon UI, `linux_fb` port, 240x320 | **builds**; one static 2.4 MB `runMidlet` |
 | JioPhone framebuffer + evdev port (`fb_port/jiophone`) | **runs on the phone** (2026-09-20): 240x320 RGB565, stride 512, pan works, keypad via `event0` |
 | App manager, installer, running a user MIDlet, key events | **verified under emulation**: install `Hello.jad` -> run -> Canvas paints, D-pad/keypad arrive with the right MIDP codes |
+| S100 shell (`os/port/`): idle screen, menu manager, key map, Messaging/Contacts/Log/Settings/Organiser/Applications | **built and emulated** (2026-09-20); contacts, messages, notes, log and settings persist in RMS; no telephony/SMS behind Call and Send yet |
 | Key map | **verified**: `device/keymap.txt` matches the phone's `matrix_keypad.kl` code for code |
 | On-device launcher, deploy, probe, screenshot scripts | **work on hardware** (with the `gsu` helper, see *Root without capabilities*) |
 | Networking | sockets are compiled in, but `gethostbyname` in a static glibc binary has no NSS -> **DNS will not resolve** on the phone until PCSL gets its own resolver (IP literals work) |
@@ -72,9 +74,13 @@ os/
     ams_start.sh / ams_stop.sh  start the app manager detached / kill it + restart b2g
     screenshot.sh           dump the phone's fb0 to a PNG
     rebuild_vm.sh           incremental cldc rebuild + MIDP relink + package
+    check_port.sh           5 s javac type check of os/port against the last MIDP build
     emu.sh                  run the ARM runtime on the PC (qemu + fake framebuffer)
     fbdump.py, sendkey.py   screenshot the fake fb / inject keypad events
     mkmidlet.sh             javac + preverify + jar a MIDlet suite (no WTK needed)
+  port/                     the S100 shell (plain files overlaid on the build, see port/README.md)
+    ams/appmanager_ui/      AppManagerUIImpl + Shell/HomeScreen/MenuManager/Keymap/... (Java)
+    ams/icons/              menu icons (PNG, drawn by gen_icons.py) -> appdb/*.raw
   examples/Hello/           HelloMIDlet: screen size, colour ramp, last key pressed
   docs/                     emulator screenshots
   patches/
@@ -118,8 +124,9 @@ What the build produces (`os/out/j2me/`):
 - `bin/keyprobe` — keypad code dumper.
 - `lib/` — `skin.bin` (Chameleon look), `_main.ks` (CA keystore),
   `_policy.txt`/`_function_groups.txt` (permission policy), properties.
-- `appdb/` — "internal storage": AMS icons/splash `.raw` images, `_main.ks`;
-  installed suites land here too.
+- `appdb/` — "internal storage": AMS icons/splash `.raw` images (including
+  the `s100_*.raw` menu icons), `_main.ks`; installed suites and the shell's
+  RMS stores (`s100_prefs`, contacts, messages, ...) land here too.
 - `j2me.sh`, `keymap.txt`.
 
 ### Try it without the phone
@@ -203,7 +210,48 @@ stock `fb_port.c` when `TARGET_DEVICE=jiophone`:
   (`tools/s60su` is the existing proof).
 
 Runtime environment knobs: `MIDP_FB_DEV`, `MIDP_KEYPAD_DEV` (use one evdev
-node only), `MIDP_KEYMAP`, `MIDP_FB_NOPAN=1`, `MIDP_FB_DEVICE`, `MIDP_HOME`.
+node only), `MIDP_KEYMAP`, `MIDP_FB_NOPAN=1`, `MIDP_FB_DEVICE`, `MIDP_HOME`,
+`J2ME_TZ` (POSIX time zone, see `device/j2me.sh`).
+
+## The S100 shell (`os/port/`)
+
+What the user sees is not phoneME's "Java MIDlets" Form any more but a
+Series 40 style shell written against LCDUI `Canvas` and romized into
+`runMidlet` with the rest of the AMS:
+
+- **Home screen** (`HomeScreen`): wallpaper, big clock, date, operator and
+  profile line; Go to / Menu / Names soft keys; digits open the dialer,
+  Call opens the dialled numbers, the navigation keys run configurable
+  shortcuts, long `#` = Silent, long End = "Switch off?" (exit to KaiOS),
+  Menu-then-`*` locks the keypad.
+- **Menu manager** (`MenuManager`, `MenuItem`, `MenuScreen`): a tree of
+  ids → labels/icons/actions built from the feature modules; the main menu
+  is a 3-column icon grid (or a list), submenus are lists, 1–9 open items.
+- **Keymap** (`Keymap`): the MIDP key codes of the fb port
+  (`keymap_input.h`) mapped to shell keys, long-press detection in `Shell`,
+  and the idle-screen shortcut table (Settings > My shortcuts).
+- **Menus**: Messaging (compose with a multitap editor, Inbox/Drafts/
+  Outbox/Sent), Contacts (names, add, edit, delete, keypad jump), Log
+  (missed/received/dialled, clear), Settings (profiles, display, date and
+  time incl. time zone, shortcuts, phone info/memory/key map, factory
+  reset, exit to KaiOS), Organiser (calculator, stopwatch, notes),
+  Applications (installed suites with open/details/update/settings/delete,
+  installer, running apps switcher, certificates).
+- **Integration**: `AppManagerUIImpl` implements phoneME's `AppManagerUI`
+  so `AppManagerPeer`/`MVMManager` are untouched; `build.sh` points
+  `AMS_APPMANAGER_UI_IMPL_DIR` at `os/port/ams/appmanager_ui` and adds the
+  icon folder to the AMS resources. Patch 0002 gained one hunk in
+  `fbapp_export.c`: End/power reaches the AMS isolate as a key event
+  (MIDlets still get the destroy request).
+
+<p><img src="docs/s100-shell.png" width="720" alt="S100 shell under emulation: idle screen, main menu, Settings, Applications, dialer, Names, message editor, calculator"></p>
+
+*The shell under `emu.sh` (the real ARM binary on qemu): idle screen,
+main menu, Settings, Applications, dialer, Names, message editor,
+calculator. Installed suites open from Applications > Collection and End
+brings you back to the shell.*
+
+Details, key table and how to extend it: [`port/README.md`](port/README.md).
 
 ## Running it on the phone
 

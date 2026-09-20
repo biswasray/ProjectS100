@@ -1,0 +1,12 @@
+#
+# S100 shell icons. build.sh adds this file to the AMS resource
+# components with
+#
+#   S100_PORT_DIR=<os/port>
+#   APPMANAGER_UI_RESOURCE_ADITIONAL_COMPONENTS=$(S100_PORT_DIR)/ams/icons/lib.gmk
+#
+# and the MIDP build then converts every *.png here into appdb/<name>.raw,
+# which Icons.java loads at run time. Regenerate the PNGs with gen_icons.py.
+#
+
+APP_MANAGER_RESOURCES_IMAGE_FOLDERS += $(S100_PORT_DIR)/ams/icons
