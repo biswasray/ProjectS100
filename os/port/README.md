@@ -42,14 +42,22 @@ device without rebuilding.
 | **Messaging** — Create message, Inbox, Drafts, Outbox, Sent items | multitap editor; Send files to Outbox (no SMS stack in this build) |
 | **Contacts** — Names, Add new, Memory status, Delete all | keypad letters jump in the list; Options: Call, Send message, Edit, Delete |
 | **Log** — Missed, Received, Dialled, Clear | Dialled is fed by the dialer |
-| **Settings** — Profiles, Display (menu view, wallpaper, idle text), **Connectivity** (below), Date and time (format, time zone), My shortcuts, Phone (info, memory, key map, factory reset), Exit to KaiOS | |
+| **Settings** — Profiles, Display (menu view, wallpaper, idle text), **Connectivity**, **Network**, Date and time (format, time zone), My shortcuts, **Location**, **Security** (all below), Phone (info, memory, key map, factory reset), Exit to KaiOS | |
 | **Settings > Connectivity > Wi-Fi** — on/off, status, available networks (scan, join with password), saved networks (connect, forget), details (IP, gateway, DNS, signal, MAC) | joins run in the background behind a "please wait" note |
 | **Settings > Connectivity > Hotspot** — on/off, network name, WPA2/open, password, channel, connected devices | uses netd's soft AP + tethering (hostapd, dnsmasq); Internet sharing needs a mobile data connection (upstream `rmnet_data0`) |
 | **Settings > Connectivity > USB** — mode (MTP, mass storage of the memory card, charging only), USB debugging on/off, cable state | sets `sys.usb.config`; MTP file transfer itself needs KaiOS's media server |
 | **Settings > Connectivity > Bluetooth** — on/off (radio + firmware), phone name, visibility | pairing is not available: the Bluedroid stack runs inside KaiOS's `bluetoothd`, which only Gecko drives |
+| **Settings > Network > SIM card management** — per-slot operator/PLMN/state, Radio on/off, Mobile data (experimental), APN, preferred SIM (dual-SIM builds), PIN request (info), details | rild keeps running without Gecko; the radio and data calls go through its `rild-debug` socket (`device/sockctl.c`, the protocol of AOSP's `radiooptions`). SIM state properties are not published in Java mode, so what is shown is the last NITZ operator |
+| **Settings > Network > Airplane mode** — on/off (radio off, Wi-Fi/hotspot/Bluetooth off), "keep Wi-Fi on", state of each radio | stored in `persist.radio.airplane_mode_on` too |
+| **Settings > Network > VPN** — profiles (name, type, server, user, password, PSK), connect/disconnect, status | the phone ships `racoon` but no `mtpd`/`pppd`: IPsec Xauth is attempted through the `racoon` init service (if that init.rc defines it) with the framework's socket protocol; PPTP/L2TP are refused with a note |
+| **Settings > Network > Private DNS** — off / Google / Cloudflare / Quad9 / AdGuard / OpenDNS / custom servers, apply now, details | sets `net.dns*` and netd's resolver (netId and per-interface forms), re-applied on every Wi-Fi join and to hotspot clients; plain DNS, there is no DoT stub |
+| **Settings > Location** — on/off, **My position** (live GPS: fix, satellites, lat/lon, altitude, accuracy, speed, heading, UTC), last known position, positioning method (standalone / assisted / network), search time, position format (decimal or DMS), cell network, details | drives Qualcomm's HAL test client `garden_app -n` (NMEA on stdout) through `s100_loc.sh`; `PositionScreen` tails the output once a second and parses GGA/RMC/GSA/GSV. Options: save position, copy to Notes, raw output |
+| **Settings > Security** — Phone lock (security code at start-up), Security keyguard (code to unlock the keypad), Automatic keyguard (off … 10 min idle), Change security code (default `12345`), PIN code request (info), Application permissions (→ Collection), Certificates, Lock keypad now | the code is a salted hash in `s100_prefs`; `CodeScreen` is the masked entry |
+| **Applications > Music player** — Now playing, All songs (Music/Download/Sounds/… on phone and card), Folders (file picker), Settings (output: automatic/loudspeaker/headphones, repeat, shuffle, volume) | plays **WAV, MP3** (minimp3) and the camera's AVI sound; keeps playing in the background. Keys: centre play/pause, Left/Right previous/next (hold: seek), Up/Down volume, `*` repeat, `#` shuffle |
+| **Applications > Video player** — clips from Videos/Movies/DCIM/Download, open folder, details, delete | plays the camera's **Motion-JPEG AVI** clips (frames decoded with the IJG library at up to the screen size, sound track in sync); 3GP/MP4 are listed but reported as unsupported. Keys: centre pause, Left/Right ±5 s, Up/Down volume, Options: full screen, sound output, details, delete |
 | **Organiser** — Calculator, Stopwatch, Notes | calculator: `*` cycles + − × ÷, `#` decimal, centre = equals |
-| **Applications** — Collection (installed suites: Open, Details, Update, Application settings, Delete), Install application (URL), **Install from file** (pick a .jad/.jar), **File manager**, **Album**, Running applications (Foreground, End), Certificates | this is the old "Java MIDlets" app manager plus the file side |
-| **File manager** — Phone memory (`/storage/emulated/0`), Memory card (when mounted), Java runtime (`/data/j2me`) | Options: Open, Details, New folder, Rename, Copy, Move, Paste here, Delete, Install (for .jad/.jar). Files open by extension: pictures → viewer (Left/Right = next/previous), text/log/xml/jad → text view, .jad/.jar → package installer, audio/video → info only (no player in Java mode) |
+| **Applications** — Collection (installed suites: Open, Details, Update, Application settings, Delete), Install application (URL), **Install from file** (pick a .jad/.jar), **File manager**, **Album**, **Music player**, **Video player**, Running applications (Foreground, End), Certificates | this is the old "Java MIDlets" app manager plus the file and media side |
+| **File manager** — Phone memory (`/storage/emulated/0`), Memory card (when mounted), Java runtime (`/data/j2me`) | Options: Open, Details, New folder, Rename, Copy, Move, Paste here, Delete, Install (for .jad/.jar). Files open by extension: pictures → viewer (Left/Right = next/previous), text/log/xml/jad → text view, .jad/.jar → package installer, sound clips → music player (the folder becomes the play list), video clips → video player |
 | **Camera** — viewfinder (~8 fps), Photo / Video modes, back/front camera, album, settings (photo size 1 MP or VGA, quality, video sound, save to phone/card, rotation, mirror, colour format) | centre = capture / start-stop recording, left soft = Options, Left/Right = mode, `*` = switch camera. Photos: `DCIM/Camera/IMG_<stamp>.jpg` (1 MP via a 5 s snapshot, VGA instantly from the preview). Video: `VID_<stamp>.avi`, Motion-JPEG 240x320 @ 10 fps, optional 48 kHz mono sound from the microphone |
 
 Contacts, messages, notes, the call log and settings are RMS record stores
@@ -89,6 +97,32 @@ so the file is simply added to `SUBSYSTEM_AMS_NATIVE_FILES` in `lib.gmk`):
 
 `os/scripts/check_native.sh` builds the file as a host program
 (`-DS100_HOST_TEST`) and writes a test JPEG and AVI into `os/out/`.
+
+### The player (`native/s100_media.c`)
+
+The music and video players (`MediaPlayer.java`, `Sys.media*`) do not use
+JSR-135 (not in this build) or KaiOS's media framework (binder, out of
+reach for a static glibc binary). `s100_media.c` is a small player on a
+pthread:
+
+- demuxers/decoders: WAV (PCM 8/16-bit), MP3 through the bundled
+  public-domain `minimp3.h` (ID3v2/v1 title/artist/album, Xing frame count
+  for the length), and the camera's Motion-JPEG AVI (`00dc` frames decoded
+  with the IJG library at 1/1–1/8 scale to fit the screen, `01wb` PCM
+  chunks as the sound track);
+- output: every source is resampled (linear) to 48 kHz stereo S16 with a
+  software volume and written to `/dev/snd/pcmC0D0p` (MultiMedia1) with
+  tinyalsa's ioctl sequence (`HW_PARAMS`, `SW_PARAMS`, `PREPARE`,
+  `WRITEI_FRAMES`, `DELAY` for the position). `device/s100_media.sh`
+  sets the codec route with `tinymix` (speaker: `RX3 MIX1 INP1`, `SPK DAC
+  Switch`; headphones: `RX1/RX2 MIX1 INP1`, `RDAC2 MUX`, `HPHL/HPHR`),
+  taken from `/system/etc/mixer_paths_qrd_skub.xml`;
+- the sound track is the clock; video frames are decoded when their time
+  comes (late ones are skipped) and handed to Java through
+  `nMediaFrame` (a mutex-protected copy into the screen's `int[]`).
+
+`check_native.sh` also builds it as a host tool (`-DS100_NO_ALSA`, raw
+PCM to a file) and decodes a generated WAV.
 
 ### How the camera works on the JioPhone
 

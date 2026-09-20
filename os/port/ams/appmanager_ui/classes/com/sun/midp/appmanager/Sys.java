@@ -27,6 +27,8 @@ final class Sys {
     static final String TMP = HOME + "/tmp";
     static final String NET_SH = "sh " + HOME + "/s100_net.sh";
     static final String CAM_SH = "sh " + HOME + "/s100_cam.sh";
+    static final String MEDIA_SH = "sh " + HOME + "/s100_media.sh";
+    static final String LOC_SH = "sh " + HOME + "/s100_loc.sh";
 
     private static final String[] PHONE_ROOTS = {
         "/storage/emulated/0", "/data/media/0", "/sdcard", "/storage/emulated/legacy"
@@ -62,6 +64,19 @@ final class Sys {
     private static native int nRecStop();
     private static native int nRecFrames();
     private static native int nJpegDecode(String path, int maxW, int maxH, int[] out);
+    /* music / video player (native/s100_media.c) */
+    private static native int nMediaOpen(String path, int maxW, int maxH);
+    private static native int nMediaInfo(int what);
+    private static native String nMediaTag(int which);
+    private static native int nMediaPlay();
+    private static native void nMediaPause();
+    private static native void nMediaStop();
+    private static native void nMediaClose();
+    private static native void nMediaSeek(int ms);
+    private static native int nMediaPos();
+    private static native int nMediaState();
+    private static native void nMediaVolume(int pct);
+    private static native int nMediaFrame(int[] out);
 
     /* ------------------------------------------------------------------ */
     /*                              files                                 */
@@ -634,5 +649,142 @@ final class Sys {
         } catch (Throwable t) {
             return -1;
         }
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*                           music / video                            */
+    /* ------------------------------------------------------------------ */
+
+    /** nMediaInfo selectors. */
+    static final int M_DURATION = 0, M_WIDTH = 1, M_HEIGHT = 2, M_HAS_AUDIO = 3,
+        M_HAS_VIDEO = 4, M_RATE = 5, M_CHANNELS = 6, M_BITRATE = 7, M_TYPE = 8,
+        M_FRAMES = 9, M_FPS100 = 10, M_DROPPED = 11;
+    /** nMediaState values (negative = error, see mediaError()). */
+    static final int MS_STOPPED = 0, MS_PLAYING = 1, MS_PAUSED = 2, MS_ENDED = 3;
+
+    /**
+     * Opens a file in the player: 0 ok, -1 unreadable, -2 unknown format,
+     * -3 unsupported codec, -4 no video decoder built in.
+     */
+    static int mediaOpen(String path, int maxW, int maxH) {
+        try {
+            return nMediaOpen(path, maxW, maxH);
+        } catch (Throwable t) {
+            return -1;
+        }
+    }
+
+    static int mediaInfo(int what) {
+        try {
+            return nMediaInfo(what);
+        } catch (Throwable t) {
+            return 0;
+        }
+    }
+
+    /** ID3 title (0), artist (1) or album (2); null if the file has none. */
+    static String mediaTag(int which) {
+        try {
+            return nMediaTag(which);
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    static boolean mediaPlay() {
+        try {
+            return nMediaPlay() == 0;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    static void mediaPause() {
+        try {
+            nMediaPause();
+        } catch (Throwable t) {
+            // ignore
+        }
+    }
+
+    static void mediaStop() {
+        try {
+            nMediaStop();
+        } catch (Throwable t) {
+            // ignore
+        }
+    }
+
+    static void mediaClose() {
+        try {
+            nMediaClose();
+        } catch (Throwable t) {
+            // ignore
+        }
+    }
+
+    static void mediaSeek(int ms) {
+        try {
+            nMediaSeek(ms);
+        } catch (Throwable t) {
+            // ignore
+        }
+    }
+
+    static int mediaPos() {
+        try {
+            return nMediaPos();
+        } catch (Throwable t) {
+            return 0;
+        }
+    }
+
+    static int mediaState() {
+        try {
+            return nMediaState();
+        } catch (Throwable t) {
+            return -2;
+        }
+    }
+
+    /** Text for a negative mediaState(). */
+    static String mediaError(int state) {
+        switch (-state - 1) {
+        case 1: return "Cannot open the sound device";
+        case 2: return "Unsupported sound format";
+        case 3: return "Cannot read the file";
+        default: return "Playback failed";
+        }
+    }
+
+    static void mediaVolume(int pct) {
+        try {
+            nMediaVolume(pct);
+        } catch (Throwable t) {
+            // ignore
+        }
+    }
+
+    /** Copies the latest video frame into out; (w << 16) | h, 0 when unchanged. */
+    static int mediaFrame(int[] out) {
+        try {
+            return nMediaFrame(out);
+        } catch (Throwable t) {
+            return 0;
+        }
+    }
+
+    /** "3:07" / "1:02:15" for a duration in ms. */
+    static String clock(int ms) {
+        if (ms < 0) {
+            ms = 0;
+        }
+        int s = ms / 1000;
+        int m = s / 60;
+        s %= 60;
+        if (m >= 60) {
+            return (m / 60) + ":" + Theme.two(m % 60) + ":" + Theme.two(s);
+        }
+        return m + ":" + Theme.two(s);
     }
 }

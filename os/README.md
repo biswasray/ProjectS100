@@ -38,6 +38,7 @@ fresh PC to Java on the phone; this file is the reference behind it.
 | App manager, installer, running a user MIDlet, key events | **verified under emulation**: install `Hello.jad` -> run -> Canvas paints, D-pad/keypad arrive with the right MIDP codes |
 | S100 shell (`os/port/`): idle screen, menu manager, key map, Messaging/Contacts/Log/Settings/Organiser/Applications | **built and emulated** (2026-09-20); contacts, messages, notes, log and settings persist in RMS; no telephony/SMS behind Call and Send yet |
 | Camera (photo + video), File manager (phone memory / memory card), package installer (.jad/.jar from a file), Settings > Connectivity (Wi-Fi, Hotspot, USB, Bluetooth) | **added 2026-09-20**; the backends (`device/s100_net.sh`, `s100_cam.sh`, `port/.../native/s100_native.c`) were probed on the phone: Wi-Fi scan/status, hotspot start/stop, USB composition switching and `mm-qcamera-app` preview/snapshot dumps all work from the Java runtime's root context. Bluetooth is on/off + name only (no pairing without Gecko's `bluetoothd`); video sound via `tinycap` is best effort |
+| Settings > Network (SIM card management, Airplane mode, VPN, Private DNS), Settings > Location (live GPS), Settings > Security (phone lock, keyguard code, auto keyguard), Music player (WAV/MP3), Video player (camera AVI clips) | **added 2026-09-21, not yet tested on the phone**. Backends chosen from a read-only probe: `rild-debug` socket for radio power/data (`device/sockctl.c`), `garden_app -n` for NMEA fixes, `tinymix` + direct ALSA (`pcmC0D0p`) for sound (`port/.../native/s100_media.c`, bundled minimp3). VPN: only `racoon` exists (no `mtpd`/`pppd`), so IPsec Xauth is best effort and PPTP/L2TP are refused |
 | Key map | **verified**: `device/keymap.txt` matches the phone's `matrix_keypad.kl` code for code |
 | On-device launcher, deploy, probe, screenshot scripts | **work on hardware** (with the `gsu` helper, see *Root without capabilities*) |
 | Networking | sockets are compiled in, but `gethostbyname` in a static glibc binary has no NSS -> **DNS will not resolve** on the phone until PCSL gets its own resolver (IP literals work) |
@@ -92,8 +93,13 @@ os/
     0002-midp-jiophone-...  the JioPhone linux_fb port + device config
   device/
     j2me.sh                 on-phone launcher (stops b2g, runs the AMS / a suite / installer)
-    s100_net.sh             Wi-Fi / hotspot / USB / Bluetooth backend (wpa_cli, ndc, setprop)
+    s100_net.sh             Wi-Fi / hotspot / USB / Bluetooth / SIM+radio / airplane / DNS / VPN
+                            backend (wpa_cli, ndc, setprop, sockctl)
     s100_cam.sh             camera backend (drives mm-qcamera-app, tinycap for sound)
+    s100_media.sh           audio routing for the players (tinymix speaker/headphones paths)
+    s100_loc.sh             GPS backend (Qualcomm's garden_app with NMEA output), cell info
+    sockctl.c               client for rild's debug socket (radio on/off, data call) and the
+                            legacy VPN daemons' argument socket
     keymap.txt              evdev keycode -> MIDP key table, editable on the phone
     keyprobe.c              tiny static tool that prints keypad event codes
     gsu.c                   "group su": adds the Android groups the adb root shell lacks
@@ -134,7 +140,9 @@ What the build produces (`os/out/j2me/`):
 - `appdb/` — "internal storage": AMS icons/splash `.raw` images (including
   the `s100_*.raw` menu icons), `_main.ks`; installed suites and the shell's
   RMS stores (`s100_prefs`, contacts, messages, ...) land here too.
-- `j2me.sh`, `keymap.txt`, `s100_net.sh`, `s100_cam.sh`.
+- `bin/sockctl` — rild-debug / VPN socket client used by `s100_net.sh`.
+- `j2me.sh`, `keymap.txt`, `s100_net.sh`, `s100_cam.sh`, `s100_media.sh`,
+  `s100_loc.sh`.
 
 ### Try it without the phone
 

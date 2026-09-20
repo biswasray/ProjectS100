@@ -76,6 +76,10 @@ export TZ="$J2ME_TZ"
 cd "$J2ME_HOME" || exit 1
 mkdir -p "$J2ME_HOME/appdb" "$TMPDIR"
 LOG=$J2ME_HOME/j2me.log
+# session state of s100_net.sh / s100_media.sh from a previous run: KaiOS
+# has had the radios and the audio codec in between, start from "normal"
+rm -f "$TMPDIR/radio.off" "$TMPDIR/airplane.on" "$TMPDIR/vpn.on" \
+      "$TMPDIR/audio.route" "$TMPDIR/data.apn" 2>/dev/null
 
 if [ "$(id -u)" != "0" ]; then
     echo "j2me.sh: must run as root (use /s60su)" >&2

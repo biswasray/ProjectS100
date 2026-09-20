@@ -180,11 +180,14 @@ package() {
     # device side: launcher, keymap, shell helper scripts, keypad probe,
     # group-su helper
     cp "$OS_DIR/device/j2me.sh" "$OS_DIR/device/keymap.txt" \
-       "$OS_DIR/device/s100_net.sh" "$OS_DIR/device/s100_cam.sh" "$OUT_DIR/"
+       "$OS_DIR/device/s100_net.sh" "$OS_DIR/device/s100_cam.sh" \
+       "$OS_DIR/device/s100_media.sh" "$OS_DIR/device/s100_loc.sh" "$OUT_DIR/"
     sed -i 's/\r$//' "$OUT_DIR"/*.sh
     "${CROSS}gcc" -static -O2 -o "$OUT_DIR/bin/keyprobe" "$OS_DIR/device/keyprobe.c"
     "${CROSS}gcc" -static -O2 -o "$OUT_DIR/bin/gsu" "$OS_DIR/device/gsu.c"
-    "${CROSS}strip" "$OUT_DIR/bin/keyprobe" "$OUT_DIR/bin/gsu"
+    # rild-debug / VPN daemon socket client (Settings > Network)
+    "${CROSS}gcc" -static -O2 -o "$OUT_DIR/bin/sockctl" "$OS_DIR/device/sockctl.c"
+    "${CROSS}strip" "$OUT_DIR/bin/keyprobe" "$OUT_DIR/bin/gsu" "$OUT_DIR/bin/sockctl"
     chmod 755 "$OUT_DIR"/bin/* "$OUT_DIR"/*.sh
     # sanity: everything that runs on the phone must be static
     for f in "$OUT_DIR"/bin/*; do

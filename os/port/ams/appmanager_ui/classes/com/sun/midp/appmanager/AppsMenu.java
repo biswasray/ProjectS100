@@ -8,6 +8,8 @@
  *                     file manager, GraphicalInstaller does the rest
  *   File manager      FileManager.java
  *   Album             the camera's pictures and clips (Camera.java)
+ *   Music player      songs on the phone (MediaPlayer.java)
+ *   Video player      clips on the phone (MediaPlayer.java)
  *   Running           MIDlets currently running: Foreground, End
  *   Certificates      CA manager (when built in)
  *
@@ -42,6 +44,8 @@ class AppsMenu {
             }));
         v.addElement(shell.menus.files.item());
         v.addElement(shell.menus.camera.albumItem());
+        v.addElement(shell.menus.media.musicItem());
+        v.addElement(shell.menus.media.videoItem());
         v.addElement(new MenuItem("applications.running", "Running applications", "running",
             new Runnable() {
                 public void run() { shell.push(new RunningScreen()); }

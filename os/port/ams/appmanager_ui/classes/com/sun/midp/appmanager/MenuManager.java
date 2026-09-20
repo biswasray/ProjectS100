@@ -22,6 +22,10 @@ class MenuManager {
     final Camera camera;
     final FileManager files;
     final Connectivity connectivity;
+    final NetworkSettings network;
+    final LocationSettings location;
+    final SecuritySettings security;
+    final MediaPlayer media;
 
     private MenuItem root;
 
@@ -36,6 +40,10 @@ class MenuManager {
         camera = new Camera(shell);
         files = new FileManager(shell);
         connectivity = new Connectivity(shell);
+        network = new NetworkSettings(shell);
+        location = new LocationSettings(shell);
+        security = new SecuritySettings(shell);
+        media = new MediaPlayer(shell);
     }
 
     MenuItem root() {

@@ -6,8 +6,9 @@
  *   Java runtime        /data/j2me (installed suites, logs, helper scripts)
  *
  * Folders open as further DirScreens; files open by extension: pictures
- * in the image viewer, text in a text view, .jad/.jar through the
- * package installer (AppManagerUIImpl.installFrom). Options offer the
+ * in the image viewer, text in a text view, sound and video clips in the
+ * music/video player (MediaPlayer), .jad/.jar through the package
+ * installer (AppManagerUIImpl.installFrom). Options offer the
  * usual Nokia set: Open, Details, New folder, Rename, Copy, Move
  * (Paste), Delete. The same screens double as a file picker
  * (pick()) for "Install from file" and friends.
@@ -127,10 +128,10 @@ class FileManager {
                 text += "\n\n(first 32 kB of " + Sys.sizeText(size) + ")";
             }
             shell.push(new TextViewScreen(name, text));
-        } else if (isVideo(ext) || isAudio(ext)) {
-            shell.showPopup(Popup.info(name + "\n" + typeName(ext) + ", "
-                + Sys.sizeText(Sys.size(path)) + "\n\nNo player in Java mode: copy it to "
-                + "a PC or play it in KaiOS.", 0));
+        } else if (isVideo(ext)) {
+            shell.menus.media.playVideo(path);
+        } else if (isAudio(ext)) {
+            shell.menus.media.playAudio(path);
         } else {
             shell.showPopup(Popup.info("No application can open\n" + name, 0));
         }

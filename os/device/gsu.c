@@ -23,7 +23,8 @@
 /* AID_* values from Android's private/android_filesystem_config.h */
 static const gid_t groups[] = {
     0,      /* root */
-    1000,   /* system   : /data, /data/misc */
+    1000,   /* system   : /data, /data/misc, rild-debug socket */
+    1001,   /* radio    : rild socket */
     1003,   /* graphics : /dev/graphics/fb0 */
     1004,   /* input    : /dev/input/event* */
     1005,   /* audio */
@@ -32,6 +33,7 @@ static const gid_t groups[] = {
     1010,   /* wifi */
     1013,   /* media */
     1015,   /* sdcard_rw */
+    1021,   /* gps      : qmux_gps socket for garden_app */
     1023,   /* media_rw */
     1028,   /* sdcard_r */
     3001,   /* net_bt_admin */

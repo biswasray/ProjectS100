@@ -27,6 +27,9 @@ class Shell extends Canvas {
     private Timer timer;
     private TimerTask longPressTask;
     private TimerTask minuteTask;
+    /** Automatic keyguard (Settings > Security): last key press, checker. */
+    private long lastKeyAt = System.currentTimeMillis();
+    private TimerTask idleTask;
     private int heldKey = Keymap.NONE;
     private boolean longFired;
     /** Action waiting for the current key to be released (see whenReleased). */
@@ -38,6 +41,7 @@ class Shell extends Canvas {
         setFullScreenMode(true);
         menus = new MenuManager(this);
         push(new HomeScreen());
+        menus.security.startup();          // phone lock: asks the code first
     }
 
     /* ---------------- screen stack ---------------- */
@@ -189,6 +193,7 @@ class Shell extends Canvas {
         if (k == Keymap.NONE) {
             return;
         }
+        lastKeyAt = System.currentTimeMillis();
         armLongPress(k);
         if (popup != null) {
             popup.key(k);
@@ -333,14 +338,37 @@ class Shell extends Canvas {
             }
         };
         timer().schedule(minuteTask, toMinute, 60000);
+        if (idleTask != null) {
+            idleTask.cancel();
+        }
+        lastKeyAt = System.currentTimeMillis();
+        idleTask = every(new Runnable() {
+            public void run() { checkIdle(); }
+        }, 5000);
         top().onShow();
         repaint();
+    }
+
+    /** Automatic keyguard: locks the idle screen after the configured idle time. */
+    private void checkIdle() {
+        int secs = SecuritySettings.autoLockSeconds();
+        if (secs <= 0 || !atHome() || popup != null || home().isLocked()) {
+            return;
+        }
+        if (System.currentTimeMillis() - lastKeyAt >= secs * 1000L) {
+            home().lock();
+            repaint();
+        }
     }
 
     protected void hideNotify() {
         if (minuteTask != null) {
             minuteTask.cancel();
             minuteTask = null;
+        }
+        if (idleTask != null) {
+            idleTask.cancel();
+            idleTask = null;
         }
         cancelLongPress();
     }

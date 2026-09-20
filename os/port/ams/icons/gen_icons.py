@@ -540,6 +540,90 @@ def icon_file_text(c):
         c.paint(rect(12, 15 + i * 5, 17 - (i == 3) * 8, 2), GREY_D)
 
 
+def icon_network(c):
+    # a globe: circle with meridian and parallels
+    c.paint(circle(20, 20, 15), BLUE_D)
+    c.paint(circle(20, 20, 13.5), BLUE)
+    c.paint(ring(20, 20, 12, 13.5), WHITE)
+    c.paint(minus(ring(20, 20, 5.5, 7), union(rect(0, 0, 40, 7.5), rect(0, 32.5, 40, 8))), WHITE)
+    c.paint(rect(19.3, 7, 1.4, 26), WHITE)
+    c.paint(rect(7, 19.3, 26, 1.4), WHITE)
+    c.paint(rect(9, 13, 22, 1.2), WHITE)
+    c.paint(rect(9, 25.8, 22, 1.2), WHITE)
+
+
+def icon_sim(c):
+    body = minus(rrect(11, 6, 18, 28, 2.5), poly([(23, 6), (29, 6), (29, 12)]))
+    shadow(c, body)
+    c.paint(body, GREY_L)
+    c.paint(rrect(14, 16, 12, 10, 1.5), YELLOW)
+    c.paint(rect(14, 19.5, 12, 0.9), ORANGE)
+    c.paint(rect(14, 22.5, 12, 0.9), ORANGE)
+    c.paint(rect(18, 16, 0.9, 10), ORANGE)
+    c.paint(rect(22, 16, 0.9, 10), ORANGE)
+
+
+def icon_airplane(c):
+    c.paint(circle(20, 20, 15), BLUE_D)
+    c.paint(circle(20, 20, 13.5), BLUE)
+    plane = union(poly([(20, 8), (22, 10), (22, 17), (32, 23), (32, 26), (22, 23), (22, 28),
+                        (25, 30), (25, 32), (20, 31), (15, 32), (15, 30), (18, 28), (18, 23),
+                        (8, 26), (8, 23), (18, 17), (18, 10)]))
+    c.paint(plane, WHITE)
+
+
+def icon_vpn(c):
+    # a shield with a keyhole
+    sh = union(rect(9, 7, 22, 14), poly([(9, 21), (31, 21), (20, 34)]))
+    shadow(c, sh)
+    c.paint(sh, GREEN_D)
+    c.paint(union(rect(11, 9, 18, 12), poly([(11, 21), (29, 21), (20, 31)])), GREEN)
+    c.paint(circle(20, 17, 3.2), WHITE)
+    c.paint(poly([(18.5, 18), (21.5, 18), (22.5, 26), (17.5, 26)]), WHITE)
+
+
+def icon_dns(c):
+    # a server box with a small lock
+    box = rrect(6, 9, 28, 22, 2)
+    shadow(c, box)
+    c.paint(box, GREY_D)
+    for i in range(3):
+        c.paint(rrect(8, 11 + i * 6.5, 24, 5, 1), GREY_L)
+        c.paint(circle(29, 13.5 + i * 6.5, 1.3), GREEN)
+    c.paint(rrect(22, 22, 12, 10, 2), BLUE)
+    c.paint(minus(ring(28, 22, 2.8, 4.3), rect(0, 22, 40, 20)), BLUE)
+    c.paint(circle(28, 26.5, 1.5), WHITE)
+
+
+def icon_location(c):
+    # a map pin
+    pin = union(circle(20, 15, 10), poly([(11, 19), (29, 19), (20, 35)]))
+    shadow(c, pin)
+    c.paint(pin, RED)
+    c.paint(circle(20, 15, 4.5), WHITE)
+
+
+def icon_security(c):
+    # a padlock
+    c.paint(minus(ring(20, 15, 5.5, 9), rect(0, 15, 40, 25)), GREY_D)
+    body = rrect(8, 15, 24, 18, 3)
+    shadow(c, body)
+    c.paint(body, YELLOW)
+    c.paint(rrect(8, 15, 24, 3, 1.5), ORANGE)
+    c.paint(circle(20, 22, 3), GREY_D)
+    c.paint(poly([(18.6, 23), (21.4, 23), (22.2, 29), (17.8, 29)]), GREY_D)
+
+
+def icon_music(c):
+    # a beamed pair of notes
+    c.paint(circle(20, 20, 15), BLUE_D)
+    c.paint(circle(20, 20, 13.5), BLUE)
+    notes = union(rect(15.5, 11, 2, 14), rect(24.5, 9, 2, 14),
+                  poly([(15.5, 11), (26.5, 8.5), (26.5, 12.5), (15.5, 15)]),
+                  circle(13.5, 25.5, 3.3), circle(22.5, 23.5, 3.3))
+    c.paint(notes, WHITE)
+
+
 SMALL_ICONS = {
     "s100_folder": 20, "s100_file": 20, "s100_file_image": 20, "s100_file_audio": 20,
     "s100_file_video": 20, "s100_file_java": 20, "s100_file_text": 20,
@@ -584,6 +668,14 @@ ICONS = {
     "s100_exit": icon_exit,
     "s100_inbox": icon_inbox,
     "s100_compose": icon_compose,
+    "s100_network": icon_network,
+    "s100_sim": icon_sim,
+    "s100_airplane": icon_airplane,
+    "s100_vpn": icon_vpn,
+    "s100_dns": icon_dns,
+    "s100_location": icon_location,
+    "s100_security": icon_security,
+    "s100_music": icon_music,
 }
 
 

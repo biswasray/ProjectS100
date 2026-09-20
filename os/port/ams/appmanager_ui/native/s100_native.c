@@ -1215,7 +1215,7 @@ static int remove_path(const char *path) {
 #ifndef S100_HOST_TEST
 
 /** Copies string parameter `index` to a malloc'ed UTF-8 buffer ("" for null). */
-static char *string_arg(int index) {
+char *s100_string_arg(int index) {
     char *out = NULL;
     KNI_StartHandles(1);
     KNI_DeclareHandle(h);
@@ -1257,7 +1257,7 @@ static char *string_arg(int index) {
 /* --- Sys.nList(String path) -> String ----------------------------------- */
 KNIEXPORT KNI_RETURNTYPE_OBJECT
 KNIDECL(com_sun_midp_appmanager_Sys_nList) {
-    char *path = string_arg(1);
+    char *path = s100_string_arg(1);
     char *text = path ? list_dir(path) : NULL;
     KNI_StartHandles(1);
     KNI_DeclareHandle(result);
@@ -1274,7 +1274,7 @@ KNIDECL(com_sun_midp_appmanager_Sys_nList) {
 /* --- Sys.nType(String path) -> int: 0 missing, 1 file, 2 dir, 3 other --- */
 KNIEXPORT KNI_RETURNTYPE_INT
 KNIDECL(com_sun_midp_appmanager_Sys_nType) {
-    char *path = string_arg(1);
+    char *path = s100_string_arg(1);
     struct stat st;
     int r = 0;
     if (path != NULL && stat(path, &st) == 0) {
@@ -1287,7 +1287,7 @@ KNIDECL(com_sun_midp_appmanager_Sys_nType) {
 /* --- Sys.nSize(String path) -> long (-1 if missing) --------------------- */
 KNIEXPORT KNI_RETURNTYPE_LONG
 KNIDECL(com_sun_midp_appmanager_Sys_nSize) {
-    char *path = string_arg(1);
+    char *path = s100_string_arg(1);
     long r = path ? file_size(path) : -1;
     free(path);
     KNI_ReturnLong((jlong) r);
@@ -1296,7 +1296,7 @@ KNIDECL(com_sun_midp_appmanager_Sys_nSize) {
 /* --- Sys.nMtime(String path) -> long seconds ---------------------------- */
 KNIEXPORT KNI_RETURNTYPE_LONG
 KNIDECL(com_sun_midp_appmanager_Sys_nMtime) {
-    char *path = string_arg(1);
+    char *path = s100_string_arg(1);
     struct stat st;
     long r = 0;
     if (path != NULL && stat(path, &st) == 0) {
@@ -1309,7 +1309,7 @@ KNIDECL(com_sun_midp_appmanager_Sys_nMtime) {
 /* --- Sys.nMkdir(String path) -> boolean --------------------------------- */
 KNIEXPORT KNI_RETURNTYPE_BOOLEAN
 KNIDECL(com_sun_midp_appmanager_Sys_nMkdir) {
-    char *path = string_arg(1);
+    char *path = s100_string_arg(1);
     int r = path != NULL && mkdir(path, 0775) == 0;
     free(path);
     KNI_ReturnBoolean(r);
@@ -1318,7 +1318,7 @@ KNIDECL(com_sun_midp_appmanager_Sys_nMkdir) {
 /* --- Sys.nRemove(String path) -> boolean (file or empty dir) ------------ */
 KNIEXPORT KNI_RETURNTYPE_BOOLEAN
 KNIDECL(com_sun_midp_appmanager_Sys_nRemove) {
-    char *path = string_arg(1);
+    char *path = s100_string_arg(1);
     int r = path != NULL && remove_path(path) == 0;
     free(path);
     KNI_ReturnBoolean(r);
@@ -1327,8 +1327,8 @@ KNIDECL(com_sun_midp_appmanager_Sys_nRemove) {
 /* --- Sys.nRename(String from, String to) -> boolean --------------------- */
 KNIEXPORT KNI_RETURNTYPE_BOOLEAN
 KNIDECL(com_sun_midp_appmanager_Sys_nRename) {
-    char *from = string_arg(1);
-    char *to = string_arg(2);
+    char *from = s100_string_arg(1);
+    char *to = s100_string_arg(2);
     int r = from != NULL && to != NULL && rename(from, to) == 0;
     free(from);
     free(to);
@@ -1338,8 +1338,8 @@ KNIDECL(com_sun_midp_appmanager_Sys_nRename) {
 /* --- Sys.nCopy(String from, String to) -> boolean ----------------------- */
 KNIEXPORT KNI_RETURNTYPE_BOOLEAN
 KNIDECL(com_sun_midp_appmanager_Sys_nCopy) {
-    char *from = string_arg(1);
-    char *to = string_arg(2);
+    char *from = s100_string_arg(1);
+    char *to = s100_string_arg(2);
     int r = from != NULL && to != NULL && copy_file(from, to) == 0;
     free(from);
     free(to);
@@ -1349,7 +1349,7 @@ KNIDECL(com_sun_midp_appmanager_Sys_nCopy) {
 /* --- Sys.nSpace(String path, boolean total) -> long bytes --------------- */
 KNIEXPORT KNI_RETURNTYPE_LONG
 KNIDECL(com_sun_midp_appmanager_Sys_nSpace) {
-    char *path = string_arg(1);
+    char *path = s100_string_arg(1);
     int total = KNI_GetParameterAsBoolean(2);
     struct statfs sf;
     long long r = -1;
@@ -1363,7 +1363,7 @@ KNIDECL(com_sun_midp_appmanager_Sys_nSpace) {
 /* --- Sys.nExec(String cmd, int timeoutMs) -> String output -------------- */
 KNIEXPORT KNI_RETURNTYPE_OBJECT
 KNIDECL(com_sun_midp_appmanager_Sys_nExec) {
-    char *cmd = string_arg(1);
+    char *cmd = s100_string_arg(1);
     int timeout = KNI_GetParameterAsInt(2);
     char *out = cmd ? run_capture(cmd, timeout, 65536) : NULL;
     KNI_StartHandles(1);
@@ -1387,7 +1387,7 @@ KNIDECL(com_sun_midp_appmanager_Sys_nExitCode) {
 /* --- Sys.nSpawn(String cmd) -> int pid ---------------------------------- */
 KNIEXPORT KNI_RETURNTYPE_INT
 KNIDECL(com_sun_midp_appmanager_Sys_nSpawn) {
-    char *cmd = string_arg(1);
+    char *cmd = s100_string_arg(1);
     int pid = cmd ? spawn_detached(cmd) : -1;
     free(cmd);
     KNI_ReturnInt(pid);
@@ -1408,7 +1408,7 @@ KNIDECL(com_sun_midp_appmanager_Sys_nKill) {
 /* --- Sys.nYuvFrame(path, w, h, fmt, rot, mirror, int[] out, ow, oh) ----- */
 KNIEXPORT KNI_RETURNTYPE_INT
 KNIDECL(com_sun_midp_appmanager_Sys_nYuvFrame) {
-    char *path = string_arg(1);
+    char *path = s100_string_arg(1);
     int w = KNI_GetParameterAsInt(2);
     int h = KNI_GetParameterAsInt(3);
     int fmt = KNI_GetParameterAsInt(4);
@@ -1444,7 +1444,7 @@ KNIDECL(com_sun_midp_appmanager_Sys_nYuvFrame) {
 /* --- Sys.nYuvJpeg(yuv, w, h, fmt, rot, mirror, div, quality, jpg) -> int  */
 KNIEXPORT KNI_RETURNTYPE_INT
 KNIDECL(com_sun_midp_appmanager_Sys_nYuvJpeg) {
-    char *yuv = string_arg(1);
+    char *yuv = s100_string_arg(1);
     int w = KNI_GetParameterAsInt(2);
     int h = KNI_GetParameterAsInt(3);
     int fmt = KNI_GetParameterAsInt(4);
@@ -1452,7 +1452,7 @@ KNIDECL(com_sun_midp_appmanager_Sys_nYuvJpeg) {
     int mirror = KNI_GetParameterAsBoolean(6);
     int div = KNI_GetParameterAsInt(7);
     int quality = KNI_GetParameterAsInt(8);
-    char *jpg = string_arg(9);
+    char *jpg = s100_string_arg(9);
     int rc = -1;
     if (yuv != NULL && jpg != NULL) {
         rc = yuv_file_to_jpeg(yuv, w, h, fmt, rot, mirror, div, quality, jpg);
@@ -1465,13 +1465,13 @@ KNIDECL(com_sun_midp_appmanager_Sys_nYuvJpeg) {
 /* --- Sys.nRecStart(yuv, w, h, fmt, rot, mirror, avi, fps, div, q, audioRate) */
 KNIEXPORT KNI_RETURNTYPE_INT
 KNIDECL(com_sun_midp_appmanager_Sys_nRecStart) {
-    char *yuv = string_arg(1);
+    char *yuv = s100_string_arg(1);
     int w = KNI_GetParameterAsInt(2);
     int h = KNI_GetParameterAsInt(3);
     int fmt = KNI_GetParameterAsInt(4);
     int rot = KNI_GetParameterAsInt(5);
     int mirror = KNI_GetParameterAsBoolean(6);
-    char *out = string_arg(7);
+    char *out = s100_string_arg(7);
     int fps = KNI_GetParameterAsInt(8);
     int div = KNI_GetParameterAsInt(9);
     int quality = KNI_GetParameterAsInt(10);
@@ -1505,7 +1505,7 @@ KNIDECL(com_sun_midp_appmanager_Sys_nRecFrames) {
  */
 KNIEXPORT KNI_RETURNTYPE_INT
 KNIDECL(com_sun_midp_appmanager_Sys_nJpegDecode) {
-    char *path = string_arg(1);
+    char *path = s100_string_arg(1);
     int maxW = KNI_GetParameterAsInt(2);
     int maxH = KNI_GetParameterAsInt(3);
     int rc = -1;

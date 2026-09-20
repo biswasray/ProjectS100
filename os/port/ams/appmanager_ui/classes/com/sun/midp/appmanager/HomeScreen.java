@@ -39,6 +39,12 @@ class HomeScreen extends Screen {
         repaint();
     }
 
+    void unlock() {
+        locked = false;
+        unlockArmedAt = 0;
+        repaint();
+    }
+
     boolean isLocked() {
         return locked;
     }
@@ -129,8 +135,8 @@ class HomeScreen extends Screen {
             if (k == Keymap.SOFT_L) {
                 unlockArmedAt = now;
             } else if (k == Keymap.STAR && now - unlockArmedAt < 2500) {
-                locked = false;
-                shell.info("Keypad unlocked");
+                unlockArmedAt = 0;
+                shell.menus.security.unlockKeypad();   // may ask for the code
             }
             repaint();                // the banner already says "Unlock, then *"
             return true;

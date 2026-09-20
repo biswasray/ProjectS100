@@ -36,14 +36,18 @@ SUBSYSTEM_AMS_JAVA_FILES += \
     $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/ImageViewScreen.java \
     $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/Keymap.java \
     $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/ListScreen.java \
+    $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/LocationSettings.java \
+    $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/MediaPlayer.java \
     $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/MenuItem.java \
     $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/MenuManager.java \
     $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/MenuScreen.java \
     $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/Messaging.java \
+    $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/NetworkSettings.java \
     $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/Organiser.java \
     $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/Popup.java \
     $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/Prefs.java \
     $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/Screen.java \
+    $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/SecuritySettings.java \
     $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/SettingsMenu.java \
     $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/Shell.java \
     $(S100_AMS_UI_DIR)/classes/com/sun/midp/appmanager/StatusBar.java \
@@ -55,12 +59,17 @@ SUBSYSTEM_AMS_JAVA_FILES += \
 
 MIDP_JAVADOC_SOURCEPATH += $(S100_AMS_UI_DIR)/classes
 
-# Native side of Sys.java (file system, processes, camera frames, JPEG,
-# AVI recorder); the IJG decoder comes from JPEG_DIR when USE_JPEG=true.
+# Native side of Sys.java: s100_native.c (file system, processes, camera
+# frames, JPEG, AVI recorder) and s100_media.c (music/video player: WAV,
+# MP3 through the bundled minimp3.h, MJPEG AVI, ALSA output); the IJG
+# decoder comes from JPEG_DIR when USE_JPEG=true.
 vpath % $(S100_AMS_UI_DIR)/native
 
 SUBSYSTEM_AMS_NATIVE_FILES += \
-    s100_native.c
+    s100_native.c \
+    s100_media.c
+
+SUBSYSTEM_AMS_EXTRA_INCLUDES += -I$(S100_AMS_UI_DIR)/native
 
 ifeq ($(USE_JPEG), true)
 SUBSYSTEM_AMS_EXTRA_INCLUDES += -I$(JPEG_DIR)

@@ -1,6 +1,9 @@
 /*
  * S100 shell - Settings: profiles, display, connectivity (Connectivity.java),
- * date and time, shortcuts, phone info, factory reset and the way out to KaiOS.
+ * network (NetworkSettings.java: SIM, airplane mode, VPN, private DNS),
+ * date and time, shortcuts, location (LocationSettings.java), security
+ * (SecuritySettings.java), phone info, factory reset and the way out to
+ * KaiOS.
  *
  * Values are stored with Prefs. The time zone is also written to
  * appdb/s100_tz.txt so that j2me.sh can export TZ for the whole VM on
@@ -33,12 +36,15 @@ class SettingsMenu {
                 public void run() { shell.push(new DisplayScreen()); }
             }),
             shell.menus.connectivity.item(),
+            shell.menus.network.item(),
             new MenuItem("settings.time", "Date and time", "clock", new Runnable() {
                 public void run() { shell.push(new TimeScreen()); }
             }),
             new MenuItem("settings.shortcuts", "My shortcuts", "shortcuts", new Runnable() {
                 public void run() { shell.push(new ShortcutsScreen()); }
             }),
+            shell.menus.location.item(),
+            shell.menus.security.item(),
             new MenuItem("settings.phone", "Phone", "phone", new Runnable() {
                 public void run() { shell.push(new PhoneScreen()); }
             }),
