@@ -113,6 +113,27 @@ index a38de35..8fee3e6 100644
  
  ifeq ($(ENABLE_XSCALE_WMMX_INSTRUCTIONS)-$(IsTarget)-$(arch), true-true-arm)
  ASM_FLAGS              += -mcpu=iwmmxt
+diff --git a/cldc/src/vm/cpu/arm/SharedStubs_arm.cpp b/cldc/src/vm/cpu/arm/SharedStubs_arm.cpp
+index 695b4ae..6b4b60a 100644
+--- a/cldc/src/vm/cpu/arm/SharedStubs_arm.cpp
++++ b/cldc/src/vm/cpu/arm/SharedStubs_arm.cpp
+@@ -810,7 +810,15 @@ void SharedStubs::generate_brute_force_icache_flush() {
+     // On Linux 2.6 and newer, r2 must be zet to zero. r2's value
+     // used to be ignored on previous versions of Linux.
+     mov(r2, imm(0));
+-    swi(0x9F0002);
++    // EABI (any kernel built without OABI_COMPAT, e.g. Android/Gonk): the
++    // syscall number goes in r7 and the swi immediate must be 0. The OABI
++    // encoding "swi 0x9F0002" is a bad syscall there and kills the VM with
++    // SIGILL (ILL_ILLTRP). r7 is callee-saved under AAPCS, so preserve it.
++    stmfd(sp, set(r7), writeback);
++    mov(r7, imm(0x0F0000));               // __ARM_NR_cacheflush = 0x0F0002
++    orr(r7, r7, imm(2));
++    swi(0);
++    ldmfd(sp, set(r7), writeback);
+     jmpx(lr);
+ 
+   bind(flush_loop);
 diff --git a/cldc/src/vm/cpu/c/AsmStubs_i386.s b/cldc/src/vm/cpu/c/AsmStubs_i386.s
 index f316c86..60889b6 100644
 --- a/cldc/src/vm/cpu/c/AsmStubs_i386.s

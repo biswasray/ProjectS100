@@ -153,10 +153,11 @@ package() {
     # holds the installed suites
     cp -r "$MIDP_OUTPUT_DIR/lib/." "$OUT_DIR/lib/"
     cp -r "$MIDP_OUTPUT_DIR/appdb/." "$OUT_DIR/appdb/"
-    # device side: launcher, keymap, keypad probe
+    # device side: launcher, keymap, keypad probe, group-su helper
     cp "$OS_DIR/device/j2me.sh" "$OS_DIR/device/keymap.txt" "$OUT_DIR/"
     "${CROSS}gcc" -static -O2 -o "$OUT_DIR/bin/keyprobe" "$OS_DIR/device/keyprobe.c"
-    "${CROSS}strip" "$OUT_DIR/bin/keyprobe"
+    "${CROSS}gcc" -static -O2 -o "$OUT_DIR/bin/gsu" "$OS_DIR/device/gsu.c"
+    "${CROSS}strip" "$OUT_DIR/bin/keyprobe" "$OUT_DIR/bin/gsu"
     chmod 755 "$OUT_DIR"/bin/* "$OUT_DIR/j2me.sh"
     # sanity: everything that runs on the phone must be static
     for f in "$OUT_DIR"/bin/*; do

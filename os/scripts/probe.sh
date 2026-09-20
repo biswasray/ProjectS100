@@ -15,7 +15,9 @@ export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
 mkdir -p "$OUT/keylayout"
 
 adb get-state >/dev/null 2>&1 || { echo "[x] no adb device" >&2; exit 1; }
-su() { adb shell /s60su -c "$*"; }
+# Windows adb.exe drops the quoting of a separate -c argument (sh -c cat /x
+# turns into a bare cat), so hand the device shell one pre-quoted string.
+su() { adb shell "/s60su -c '$*'"; }
 
 echo "[*] framebuffer"
 su "ls -la /dev/graphics/ /dev/fb* 2>/dev/null; for f in modes bits_per_pixel virtual_size stride name; do echo \"fb0/\$f: \$(cat /sys/class/graphics/fb0/\$f 2>/dev/null)\"; done" | tee "$OUT/framebuffer.txt"

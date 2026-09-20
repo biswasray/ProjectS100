@@ -31,16 +31,19 @@ This is the "much more work" option from the project plan, so read the
 | PCSL for ARM | **builds** |
 | CLDC-HI VM for ARMv5+/VFP, romized, isolates on | **builds and runs** Java under `qemu-arm` (JIT works) |
 | MIDP 2.1 + Chameleon UI, `linux_fb` port, 240x320 | **builds**; one static 2.4 MB `runMidlet` |
-| JioPhone framebuffer + evdev port (`fb_port/jiophone`) | **verified under emulation** (file-backed fb + FIFO keypad, see below); **untested on hardware** |
+| JioPhone framebuffer + evdev port (`fb_port/jiophone`) | **runs on the phone** (2026-09-20): 240x320 RGB565, stride 512, pan works, keypad via `event0` |
 | App manager, installer, running a user MIDlet, key events | **verified under emulation**: install `Hello.jad` -> run -> Canvas paints, D-pad/keypad arrive with the right MIDP codes |
-| Key map | plausible defaults + runtime override file; **must be verified with `probe.sh`/`keyprobe`** |
-| On-device launcher, deploy, probe scripts | written; **untested on hardware** |
+| Key map | **verified**: `device/keymap.txt` matches the phone's `matrix_keypad.kl` code for code |
+| On-device launcher, deploy, probe, screenshot scripts | **work on hardware** (with the `gsu` helper, see *Root without capabilities*) |
 | Networking | sockets are compiled in, but `gethostbyname` in a static glibc binary has no NSS -> **DNS will not resolve** on the phone until PCSL gets its own resolver (IP literals work) |
 | Telephony / SMS / audio (JSR-120/135) | not started |
 | Boot straight into Java (init.rc service) | not started; `j2me.sh` is started from adb for now |
 
-The phone was not connected while this was written; everything past the
-emulator needs one bring-up session with the device.
+First hardware session done (2026-09-20): the app manager, the installer and
+a user MIDlet run on the LCD and take keypad input. Two things had to change
+to get there: the VM's icache flush used the OABI `swi 0x9f0002` (SIGILL on
+this EABI kernel, fixed in patch `0001`), and the adb root shell turned out to
+have no capabilities (see below).
 
 <p>
 <img src="docs/emu-ams.png" width="240" alt="phoneME app manager, emulated">
@@ -63,6 +66,9 @@ os/
     build.sh                sync | pcsl | cldc | midp | package | all | clean
     deploy.sh               adb push os/out/j2me -> /data/j2me (needs tools/ root)
     probe.sh                dump fb geometry, input devices, Gonk .kl key layouts
+    ams_start.sh / ams_stop.sh  start the app manager detached / kill it + restart b2g
+    screenshot.sh           dump the phone's fb0 to a PNG
+    rebuild_vm.sh           incremental cldc rebuild + MIDP relink + package
     emu.sh                  run the ARM runtime on the PC (qemu + fake framebuffer)
     fbdump.py, sendkey.py   screenshot the fake fb / inject keypad events
     mkmidlet.sh             javac + preverify + jar a MIDlet suite (no WTK needed)
@@ -75,6 +81,7 @@ os/
     j2me.sh                 on-phone launcher (stops b2g, runs the AMS / a suite / installer)
     keymap.txt              evdev keycode -> MIDP key table, editable on the phone
     keyprobe.c              tiny static tool that prints keypad event codes
+    gsu.c                   "group su": adds the Android groups the adb root shell lacks
   toolchain/mk_shim.sh      creates toolchain/bin/{gcc,g++,as,...} -> arm-linux-gnueabi-*
   phoneME/                  (gitignored) the patched source checkout
   out/j2me/                 (gitignored) what deploy.sh pushes
@@ -143,7 +150,10 @@ and JDK 5/6. On Ubuntu 24.04 / gcc 13 / JDK 8:
   binutils ≥ 2.41; the generated `ROMImage.cpp` trips C++11 narrowing so the
   VM is compiled as `-std=gnu++98`; and `-fstrict-aliasing` had to become
   `-fno-strict-aliasing -fno-delete-null-pointer-checks -fwrapv` — with
-  gcc 13 -O2 the romizer segfaulted at start otherwise.
+  gcc 13 -O2 the romizer segfaulted at start otherwise. Also in `0001`: the
+  ARM stub generator's icache flush (`SharedStubs_arm.cpp`) is emitted in
+  EABI form (`r7 = __ARM_NR_cacheflush; swi 0`) instead of the OABI
+  `swi 0x9f0002`, which is a `SIGILL` on Android/Gonk kernels.
 - **preverifier** (`0001`): the shipped static binary has the same `stat()`
   problem, so it is rebuilt from source; the trunk source has a real bug
   (`file.c` frees the name/type ID hash after every class while loaded
@@ -192,43 +202,93 @@ stock `fb_port.c` when `TARGET_DEVICE=jiophone`:
 Runtime environment knobs: `MIDP_FB_DEV`, `MIDP_KEYPAD_DEV` (use one evdev
 node only), `MIDP_KEYMAP`, `MIDP_FB_NOPAN=1`, `MIDP_FB_DEVICE`, `MIDP_HOME`.
 
-## First run on the phone
+## Running it on the phone
 
 Prerequisite: the rooted boot from `tools/` (adb authorised, `/s60su`).
-Run the emulator steps above once first, so you know what a healthy run
-looks like in `j2me.log`.
 
 ```bash
-# 1. facts first: fb depth/stride, input devices, the Gonk key layouts
-bash os/scripts/probe.sh                # -> os/out/probe/, prints the .kl tables
-#    compare os/out/probe/keylayout/*.kl with device/keymap.txt and fix the codes
+# 1. facts: fb depth/stride, input devices, the Gonk key layouts -> os/out/probe/
+bash os/scripts/probe.sh
 
-# 2. push the runtime
+# 2. push the runtime (stages through /data/local/tmp, installs to /data/j2me)
 bash os/scripts/deploy.sh
 
-# 3. see raw key codes (optional, if the .kl files were not conclusive)
-adb shell /s60su -c /data/j2me/bin/keyprobe
+# 3. the Java application manager on the LCD (stops b2g; b2g comes back when it exits)
+bash os/scripts/ams_start.sh            # detached; ams_stop.sh kills it and restarts b2g
+bash os/scripts/screenshot.sh           # -> os/out/phone.png, what fb0 holds right now
 
-# 4. start the Java application manager on the LCD (stops b2g, restarts it on exit)
-adb shell /s60su -c /data/j2me/j2me.sh
-adb shell /s60su -c "tail -f /data/j2me/j2me.log"     # in a second terminal
-
-# 5. install and run a MIDlet
-adb push Hello.jar /data/local/tmp/ && adb shell /s60su -c "cp /data/local/tmp/Hello.jar /data/j2me/"
-adb shell /s60su -c "/data/j2me/j2me.sh install /data/j2me/Hello.jar"
-adb shell /s60su -c "/data/j2me/j2me.sh list"
-adb shell /s60su -c "/data/j2me/j2me.sh run 1"
+# 4. install and run a MIDlet (the installer needs the display: stop the AMS first)
+bash os/scripts/ams_stop.sh
+adb push os/examples/Hello/Hello.jar /data/local/tmp/ && adb push os/examples/Hello/Hello.jad /data/local/tmp/
+adb shell "/s60su -c '/data/j2me/bin/gsu -c \"cp /data/local/tmp/Hello.ja? /data/j2me/\"'"
+adb shell "/s60su -c '/data/j2me/j2me.sh install /data/j2me/Hello.jad'"
+adb shell "/s60su -c '/data/j2me/j2me.sh list'"
+bash os/scripts/ams_start.sh run 2      # or pick it in the app manager
 ```
 
-Things to look at if the screen stays black: the runtime's log
-(`/data/j2me/j2me.log`), `MIDP_FB_NOPAN=1` (if the driver dislikes the pan),
-`echo 0 > /sys/class/graphics/fb0/blank`, and whether `b2g` really stopped
-(`ps | grep b2g`). If keys do nothing: `keyprobe`, then `keymap.txt`.
+<p>
+<img src="docs/phone-ams.png" width="256" alt="phoneME app manager, phone fb0 dump">
+<img src="docs/phone-hello.png" width="256" alt="HelloMIDlet on the phone">
+</p>
+
+*`screenshot.sh` output on the LF-2403N (both fb0 pages are shown; the lower
+one is the pan back buffer).*
+
+### What the LF-2403N reports
+
+- `fb0`: `mdssfb_d0000`, `U:240x320p-0`, 16 bpp, stride 512 (256 px), virtual
+  240x640 (two pages, `FBIOPAN_DISPLAY` works). KaiOS composites through MDP
+  overlays, so fb0 is black while b2g runs; once b2g is stopped the plain
+  fb path shows what we write.
+- input: `event0` = `matrix_keypad` (the keypad), `event1` = `qpnp_pon`
+  (PMIC power button, also code 116), `event2/3` = headset jack.
+- `/system/usr/keylayout/matrix_keypad.kl` is what `device/keymap.txt`
+  already contains: digits 2..11, `*`/`#` 522/523, D-pad 103/108/105/106,
+  OK 352, soft keys 139/158, call 231, power 116.
+- kernel 3.10.49, EABI only: the VM's icache flush used the OABI encoding
+  `swi 0x9f0002`, which this kernel treats as a bad syscall and answers
+  with `SIGILL` (`code=4`, `ILL_ILLTRP`). `SharedStubs_arm.cpp` now emits
+  the EABI form (`r7 = 0x0f0002; swi 0`), see patch `0001`.
+
+### Root without capabilities
+
+`adbd` on this build runs as `shell` with a capability bounding set of just
+`CAP_SETUID|CAP_SETGID` (`CapBnd: 00000000000000c0`), and a bounding set
+survives every exec, including setuid ones. So `/s60su` really gives uid 0,
+but **without `CAP_DAC_OVERRIDE`**: root is still refused by anything not
+owned by root — `/data` (system:system 771), `/dev/graphics/fb0`
+(system:graphics 660), the backlight node (system:system 644). `adb root`
+is refused (user build).
+
+`CAP_SETGID`/`CAP_SETUID` are enough to work around it, which is what
+`device/gsu.c` does: it joins the owning groups (`system`, `graphics`,
+`input`, `inet`, ...) and optionally switches to another uid (`gsu -u 1000`
+for the `system`-owned backlight file). `deploy.sh` and `j2me.sh` go through
+it automatically; for ad-hoc commands use:
+
+```bash
+adb shell "/s60su -c '/data/j2me/bin/gsu -c \"<cmd>\"'"
+```
+
+Note the quoting: Windows `adb.exe` drops the quotes of a separate `-c`
+argument (`/s60su -c "cat /x"` reaches the device as `sh -c cat /x`), so the
+whole remote command is passed as one string. `tools/s60su.c` carries the
+same `setgroups()` fix for the next boot image rebuild.
+
+### If something is off
+
+`/data/j2me/j2me.log` (VM output) and `/data/j2me/ams.out` (launcher). A
+black LCD with content in `screenshot.sh` = backlight: KaiOS leaves
+`/sys/class/leds/lcd-backlight/brightness` at 0 when the screen timed out,
+`j2me.sh` sets `J2ME_BACKLIGHT` (default 128) through `gsu -u 1000`.
+`MIDP_FB_NOPAN=1` if the panel stops updating, `keyprobe` if keys do
+nothing. Exiting the AMS (or killing the VM) restarts b2g, which
+re-enumerates USB — expect adb to drop for a few seconds.
 
 ## Roadmap to a "J2ME OS"
 
-1. Bring-up on hardware: fb pixel format, key codes, backlight; fix
-   `jiophone_port.c` against what `probe.sh` reports.
+1. ~~Bring-up on hardware~~ done; left over: the port could read the
+   backlight/blank state back and restore it for KaiOS on exit.
 2. Boot into Java: add an `init.rc` service (`service j2me /data/j2me/j2me.sh`,
    `class late_start`) to the rooted boot via `tools/patch_boot.py`, and either
    disable `b2g` there or keep it as the fallback the AMS can switch back to.

@@ -12,29 +12,44 @@ set -euo pipefail
 OS_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$OS_DIR/out/j2me"
 DEST=/data/j2me
+STAGE=/data/local/tmp/j2me_stage
 export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
+# with path conversion off, adb.exe must be handed a Windows-style local path
+OUT_LOCAL="$(cygpath -m "$OUT" 2>/dev/null || echo "$OUT")"
 
-[[ -x "$OUT/bin/runMidlet" || -f "$OUT/bin/runMidlet" ]] || {
+[[ -f "$OUT/bin/runMidlet" ]] || {
     echo "[x] $OUT/bin/runMidlet missing - run scripts/build.sh first" >&2; exit 1; }
+[[ -f "$OUT/bin/gsu" ]] || {
+    echo "[x] $OUT/bin/gsu missing - run scripts/build.sh package" >&2; exit 1; }
 
 adb get-state >/dev/null 2>&1 || { echo "[x] no adb device (boot the phone normally, USB debugging via rooted boot)" >&2; exit 1; }
-adb shell /s60su -c id | grep -q "uid=0" || { echo "[x] /s60su not giving root - is the rooted boot flashed?" >&2; exit 1; }
+adb shell "/s60su -c id" | grep -q "uid=0" || { echo "[x] /s60su not giving root - is the rooted boot flashed?" >&2; exit 1; }
 
-su() { adb shell /s60su -c "$*"; }
+# Windows adb.exe drops the quoting of a separate -c argument (sh -c cat /x
+# turns into a bare cat), so hand the device shell one pre-quoted string.
+# The uid-0 shell adb gives us has no CAP_DAC_OVERRIDE, so every command also
+# goes through gsu (device/gsu.c) to pick up the system/graphics/input groups.
+GSU=$STAGE/bin/gsu
+su() { adb shell "/s60su -c '$GSU -c \"$*\"'"; }
 
-echo "[*] preparing $DEST"
+echo "[*] pushing runtime ($(du -sh "$OUT" | cut -f1)) to $STAGE"
+# adb push runs as shell; /data/local/tmp is the only place it may write
+adb shell "rm -rf $STAGE"
+adb push "$OUT_LOCAL/." "$STAGE" >/dev/null
+adb shell "chmod 755 $STAGE/bin/* $STAGE/j2me.sh"
+adb shell "/s60su -c '$GSU -c id'" | grep -q "(graphics)" || {
+    echo "[x] $GSU did not grant the graphics group" >&2; exit 1; }
+
+echo "[*] installing into $DEST"
 su "mkdir -p $DEST/bin $DEST/lib $DEST/appdb $DEST/tmp && chmod 755 $DEST"
-
-echo "[*] pushing runtime ($(du -sh "$OUT" | cut -f1))"
-# adb push to /data/j2me directly needs root; stage through /data/local/tmp
-adb push "$OUT/." /data/local/tmp/j2me_stage >/dev/null
-su "cp -r /data/local/tmp/j2me_stage/* $DEST/ && rm -rf /data/local/tmp/j2me_stage"
-su "chmod 755 $DEST/bin/* $DEST/j2me.sh"
+su "cp -r $STAGE/* $DEST/ && chmod 755 $DEST/bin/* $DEST/j2me.sh"
+adb shell "rm -rf $STAGE"
+GSU=$DEST/bin/gsu
 
 echo "[+] deployed. Try:"
-echo "      adb shell /s60su -c $DEST/j2me.sh            # app manager on the LCD"
-echo "      adb shell /s60su -c \"$DEST/j2me.sh install /data/j2me/Hello.jad\""
-echo "      adb shell /s60su -c \"$DEST/j2me.sh sh\"       # shell with b2g stopped"
+echo "      adb shell \"/s60su -c $DEST/j2me.sh\"                       # app manager on the LCD"
+echo "      adb shell \"/s60su -c '$DEST/j2me.sh install $DEST/Hello.jad'\""
+echo "      adb shell \"/s60su -c '$DEST/j2me.sh sh'\"                  # shell with b2g stopped"
 
 case "${1:-}" in
     --run)      su "$DEST/j2me.sh" ;;

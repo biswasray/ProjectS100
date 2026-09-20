@@ -24,6 +24,8 @@ export MIDP_FB_DEVICE=${MIDP_FB_DEVICE:-jiophone}
 # Gonk provides no writable TMPDIR by default
 export TMPDIR=${TMPDIR:-$J2ME_HOME/tmp}
 export HOME="$J2ME_HOME"
+# LCD backlight level while Java runs (0-255)
+J2ME_BACKLIGHT=${J2ME_BACKLIGHT:-128}
 
 cd "$J2ME_HOME" || exit 1
 mkdir -p "$J2ME_HOME/appdb" "$TMPDIR"
@@ -34,6 +36,18 @@ if [ "$(id -u)" != "0" ]; then
     exit 1
 fi
 
+# An adb-spawned root shell has no CAP_DAC_OVERRIDE (see device/gsu.c), so
+# fb0 (system:graphics) is unreadable until we join that group: re-exec
+# through bin/gsu once.
+case "$(id)" in
+    *"(graphics)"*) ;;
+    *)  if [ -x "$J2ME_HOME/bin/gsu" ]; then
+            exec "$J2ME_HOME/bin/gsu" "$0" "$@"
+        fi
+        echo "j2me.sh: not in group graphics and $J2ME_HOME/bin/gsu missing" >&2
+        exit 1 ;;
+esac
+
 b2g_stop() {
     [ -n "$J2ME_KEEP_B2G" ] && return
     # b2g is the KaiOS compositor + Gecko; stopping it releases fb0 and evdev
@@ -41,9 +55,16 @@ b2g_stop() {
     # give surfaceflinger-less panels a moment, then make sure it is lit
     sleep 1
     echo 0 > /sys/class/graphics/fb0/blank 2>/dev/null
-    # keep the backlight on while Java runs
+    # Turn the backlight on: KaiOS usually left it at 0 (screen timed out).
+    # The sysfs node is system:system 644 and our root lacks
+    # CAP_DAC_OVERRIDE, so the write has to run as uid 1000 (gsu -u).
     for b in /sys/class/leds/lcd-backlight/brightness /sys/class/backlight/*/brightness; do
-        [ -f "$b" ] && echo 128 > "$b" 2>/dev/null
+        [ -f "$b" ] || continue
+        if [ -w "$b" ]; then
+            echo "$J2ME_BACKLIGHT" > "$b"
+        else
+            "$J2ME_HOME/bin/gsu" -u 1000 -c "echo $J2ME_BACKLIGHT > $b"
+        fi
     done
 }
 
