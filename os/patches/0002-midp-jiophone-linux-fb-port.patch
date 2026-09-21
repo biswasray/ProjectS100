@@ -2329,6 +2329,32 @@ index 0000000..a9dd28f
 +# all file names there are relative to this file's directory
 +
 +constants_jiophone.xml
+diff --git a/midp/src/configuration/configuration_xml/share/i18n_constants.xml b/midp/src/configuration/configuration_xml/share/i18n_constants.xml
+index 8842f3c..ddde23a 100644
+--- a/midp/src/configuration/configuration_xml/share/i18n_constants.xml
++++ b/midp/src/configuration/configuration_xml/share/i18n_constants.xml
+@@ -1220,6 +1220,9 @@
+   <constant Type="int"
+             Name="AMS_GRA_INTLR_FILE_NOT_FOUND"
+             Comment="AMS: com.sun.midp.installer.GraphicalInstaller"/> 
++  <constant Type="int"
++            Name="CLEAR"
++            Comment="Soft key label: backspace while editing text"/>
+ </constant_class>
+ </constants>
+ </configuration>
+diff --git a/midp/src/configuration/configuration_xml/share/l10n/en-US.xml b/midp/src/configuration/configuration_xml/share/l10n/en-US.xml
+index f5da138..2bc52d4 100644
+--- a/midp/src/configuration/configuration_xml/share/l10n/en-US.xml
++++ b/midp/src/configuration/configuration_xml/share/l10n/en-US.xml
+@@ -820,5 +820,7 @@
+                 Value="Loading the application file..."/>
+ <localized_string Key="AMS_GRA_INTLR_FILE_NOT_FOUND"
+                 Value="File not found in the current path"/>       
++<localized_string Key="CLEAR"
++                Value="Clear"/>
+ </localized_strings>
+ </configuration>
 diff --git a/midp/src/events/input_port/fb/native/fb_handle_input.c b/midp/src/events/input_port/fb/native/fb_handle_input.c
 index a1e4637..3bd343a 100644
 --- a/midp/src/events/input_port/fb/native/fb_handle_input.c
@@ -3312,3 +3338,367 @@ index 758c5a7..888f14c 100644
  endif
  endif
 +endif
+diff --git a/midp/src/highlevelui/lcdlf/lfjava/classes/com/sun/midp/chameleon/MIDPWindow.java b/midp/src/highlevelui/lcdlf/lfjava/classes/com/sun/midp/chameleon/MIDPWindow.java
+index b4aef01..2fc8476 100644
+--- a/midp/src/highlevelui/lcdlf/lfjava/classes/com/sun/midp/chameleon/MIDPWindow.java
++++ b/midp/src/highlevelui/lcdlf/lfjava/classes/com/sun/midp/chameleon/MIDPWindow.java
+@@ -501,6 +501,26 @@ public class MIDPWindow extends CWindow {
+         return screenMode == FULL_SCR_MODE;
+     }
+ 
++    /**
++     * Remaps the soft keys to "Options" / "Clear" while an editable text
++     * component has the focus (see SoftButtonLayer.setTextEditMode).
++     *
++     * @param on true while text is being edited
++     */
++    public void setTextEditMode(boolean on) {
++        buttonLayer.setTextEditMode(on);
++    }
++
++    /**
++     * Text edit: the centre key invokes the OK command (see
++     * SoftButtonLayer.textEditOk).
++     *
++     * @return true if a command was invoked
++     */
++    public boolean textEditOk() {
++        return buttonLayer.textEditOk();
++    }
++
+ 
+ 
+ 
+diff --git a/midp/src/highlevelui/lcdlf/lfjava/classes/com/sun/midp/chameleon/layers/SoftButtonLayer.java b/midp/src/highlevelui/lcdlf/lfjava/classes/com/sun/midp/chameleon/layers/SoftButtonLayer.java
+index 18cd43f..a032052 100644
+--- a/midp/src/highlevelui/lcdlf/lfjava/classes/com/sun/midp/chameleon/layers/SoftButtonLayer.java
++++ b/midp/src/highlevelui/lcdlf/lfjava/classes/com/sun/midp/chameleon/layers/SoftButtonLayer.java
+@@ -125,6 +125,23 @@ public class SoftButtonLayer extends CLayer implements CommandListener {
+      */
+     protected boolean menuUP;
+ 
++    /**
++     * True while an editable text component (TextBox, focused TextField)
++     * owns the keypad. The keypad of the JioPhone has no Clear key, so
++     * the soft keys are remapped Series 40 style: the left key is
++     * "Options", a menu of every command plus Cancel, and the right key is
++     * "Clear", which is passed through to the text component as the
++     * clear key (see TextFieldLFImpl.isClearKey). With the menu up the
++     * keys read "Select" / "Back".
++     */
++    protected boolean textEdit;
++
++    /**
++     * The Cancel entry closing the text-edit Options menu; it never
++     * reaches the application.
++     */
++    protected Command cancelCmd;
++
+     /**
+      * A flag indicating the alert is up.
+      */
+@@ -229,6 +246,111 @@ public class SoftButtonLayer extends CLayer implements CommandListener {
+             }
+         }
+         toggleMenu(menuUP);
++        setButtonLabels();
++    }
++
++    /**
++     * Switches the text-edit soft key mapping on or off. Called by the
++     * text component when it gains or loses the input focus.
++     *
++     * @param on true while an editable text component has the focus
++     */
++    public void setTextEditMode(boolean on) {
++        if (textEdit == on) {
++            return;
++        }
++        textEdit = on;
++        if (menuUP) {
++            dismissMenu();
++            subMenu = null;
++        }
++        setButtonLabels();
++    }
++
++    /**
++     * Text edit: the centre (Select) key stands for OK. Invokes the OK
++     * type command of the screen or field, or failing that its first
++     * item/screen command, as the Options menu would.
++     *
++     * @return true if a command was invoked
++     */
++    public boolean textEditOk() {
++        if (!textEdit || menuUP) {
++            return false;
++        }
++        Command best = null;
++        int bestRank = 0;
++        int n2 = (soft2 == null) ? 0 : soft2.length;
++        for (int i = -1; i < n2; i++) {
++            Command c = (i < 0) ? soft1 : soft2[i];
++            if (c == null || c == cancelCmd || c instanceof SubMenuCommand) {
++                continue;
++            }
++            int rank;
++            switch (c.getCommandType()) {
++                case Command.OK:     rank = 1; break;
++                case Command.ITEM:   rank = 2; break;
++                case Command.SCREEN: rank = 3; break;
++                default:             continue;
++            }
++            if (best == null || rank < bestRank ||
++                (rank == bestRank && c.getPriority() < best.getPriority())) {
++                best = c;
++                bestRank = rank;
++            }
++        }
++        if (best == null) {
++            return false;
++        }
++        processCommand(best);
++        return true;
++    }
++
++    /**
++     * Opens the text-edit Options menu: every command of the screen and
++     * the focused item, followed by Cancel.
++     */
++    protected void showEditMenu() {
++        if (menuLayer == null) {
++            initMenu();
++        }
++        if (cancelCmd == null) {
++            cancelCmd = new Command(Resource.getString(ResourceConstants.CANCEL),
++                                    Command.CANCEL, 100);
++        }
++        int n2 = (soft2 == null) ? 0 : soft2.length;
++        Command[] cmds = new Command[n2 + (soft1 == null ? 1 : 2)];
++        int i = 0;
++        // a Back/Exit type soft1 goes below the other commands, as on the
++        // phones this mimics; an OK type one stays on top
++        boolean soft1Last = soft1 != null &&
++            (soft1.getCommandType() == Command.BACK ||
++             soft1.getCommandType() == Command.EXIT ||
++             soft1.getCommandType() == Command.CANCEL ||
++             soft1.getCommandType() == Command.STOP);
++        if (soft1 != null && !soft1Last) {
++            cmds[i++] = soft1;
++        }
++        for (int j = 0; j < n2; j++) {
++            cmds[i++] = soft2[j];
++        }
++        if (soft1Last) {
++            cmds[i++] = soft1;
++        }
++        cmds[i] = cancelCmd;
++
++        menuLayer.setMenuCommands(cmds, this, 0);
++        menuUP = true;
++        toggleMenu(menuUP);
++        if (owner != null) {
++            ((MIDPWindow)owner).requestHideNotify();
++            owner.addLayer(menuLayer);
++            menuLayer.alignMenu();
++            menuLayer.requestRepaint();
++            menuLayer.setScrollInd(ScrollIndLayer.getInstance(ScrollIndSkin.MODE));
++        }
++        setButtonLabels();
++        requestRepaint();
+     }
+ 
+     /**
+@@ -582,12 +704,20 @@ public class SoftButtonLayer extends CLayer implements CommandListener {
+      * Soft button 1 handler.
+      */
+     protected void soft1() {
+-        if (menuUP) {
++        if (menuUP && textEdit) {
++            // "Select": activate the highlighted entry of the (sub)menu
++            CLayer m = menuLayer.cascadeMenuUp ? (CLayer)menuLayer.cascadeMenu
++                                               : (CLayer)menuLayer;
++            m.keyInput(EventConstants.PRESSED,
++                       com.sun.midp.configurator.Constants.KEYCODE_SELECT);
++        } else if (menuUP) {
+             dismissMenu();
+             subMenu = null;
+             requestRepaint();
+             setButtonLabels();
+             setInteractive(false);
++        } else if (textEdit) {
++            showEditMenu();
+         } else {
+             processCommand(soft1);
+         }
+@@ -609,7 +739,18 @@ public class SoftButtonLayer extends CLayer implements CommandListener {
+      * Soft button 2 handler.
+      */
+     protected void soft2() {
+-        if (soft2 != null) {
++        if (textEdit) {
++            // "Back" closes the Options (sub)menu; without the menu the
++            // key is Clear and never reaches this layer (see isSoft2Active)
++            if (menuUP && menuLayer.cascadeMenuUp) {
++                menuLayer.dismissCascadeMenu();
++            } else if (menuUP) {
++                dismissMenu();
++                subMenu = null;
++                requestRepaint();
++            }
++            setInteractive(false);
++        } else if (soft2 != null) {
+             if (soft2.length == 1 &&
+                 soft2[0] instanceof SubMenuCommand) {
+                 subMenu = (SubMenuCommand) soft2[0];
+@@ -653,6 +794,10 @@ public class SoftButtonLayer extends CLayer implements CommandListener {
+      * @return true if soft2 command can be processed, false otherwise
+      */
+     protected boolean isSoft2Active() {
++        // text edit: the right key is the text component's Clear key
++        if (textEdit && !menuUP) {
++            return false;
++        }
+         // when MIDPWindow is not in full screen mode, we absorb
+         // all key events reserved for the delivery of commands
+         if (!((MIDPWindow)owner).isInFullScreenMode()) {
+@@ -685,6 +830,10 @@ public class SoftButtonLayer extends CLayer implements CommandListener {
+      * @return true if soft1 command can be processed, false otherwise
+      */
+     protected boolean isSoft1Active() {
++        // text edit: the left key always opens the Options menu
++        if (textEdit) {
++            return true;
++        }
+         // when MIDPWindow is not in full screen mode, we absorb
+         // all key events reserved for the delivery of commands
+         if (!((MIDPWindow)owner).isInFullScreenMode()) {
+@@ -729,7 +878,7 @@ public class SoftButtonLayer extends CLayer implements CommandListener {
+ 
+         setInteractive(false);
+ 
+-        if (tunnel == null || cmd == null) {
++        if (tunnel == null || cmd == null || cmd == cancelCmd) {
+             return;
+         }
+ 
+@@ -754,7 +903,13 @@ public class SoftButtonLayer extends CLayer implements CommandListener {
+         String label1 = (soft1 == null) ? null : soft1.getLabel();
+         String label2;
+ 
+-        if (soft2 == null) {
++        if (textEdit && menuUP) {
++            label1 = Resource.getString(ResourceConstants.SELECT);
++            label2 = SoftButtonSkin.TEXT_BACKCMD;
++        } else if (textEdit) {
++            label1 = Resource.getString(ResourceConstants.OPTIONS);
++            label2 = Resource.getString(ResourceConstants.CLEAR);
++        } else if (soft2 == null) {
+             label2 = null;
+         } else if (soft2.length == 1) {
+             label2 = soft2[0].getLabel();
+diff --git a/midp/src/highlevelui/lcdlf/lfjava/classes/javax/microedition/lcdui/TextFieldLFImpl.java b/midp/src/highlevelui/lcdlf/lfjava/classes/javax/microedition/lcdui/TextFieldLFImpl.java
+index 49e9061..e662e84 100644
+--- a/midp/src/highlevelui/lcdlf/lfjava/classes/javax/microedition/lcdui/TextFieldLFImpl.java
++++ b/midp/src/highlevelui/lcdlf/lfjava/classes/javax/microedition/lcdui/TextFieldLFImpl.java
+@@ -999,8 +999,12 @@ class TextFieldLFImpl extends ItemLFImpl implements
+      * @return true if keu code is Clear one, false otherwise
+      */
+     public boolean isClearKey(int keyCode) {
++        // The right soft key doubles as Clear while the text component
++        // has the focus (SoftButtonLayer.setTextEditMode): the JioPhone
++        // keypad has no clear key of its own.
+         return EventConstants.SYSTEM_KEY_CLEAR ==
+-            KeyConverter.getSystemKey(keyCode);        
++            KeyConverter.getSystemKey(keyCode) ||
++            keyCode == EventConstants.SOFT_BUTTON2;
+     }
+     /**
+      * Returns true if the keyCode is used as 'enter' (user types in \n)
+@@ -1225,6 +1229,22 @@ class TextFieldLFImpl extends ItemLFImpl implements
+             setLongKey(keyCode);
+         }
+ 
++        // The centre key is OK while editing (Series 40): fire the OK
++        // command instead of feeding Select to the input mode. A
++        // predictive-text popup takes the key to accept its word first.
++        // SYNC NOTE: may call into application code, so outside LCDUILock.
++        if (!theSameKey && editable && !hasPTI() &&
++            KeyConverter.getSystemKey(keyCode) ==
++                EventConstants.SYSTEM_KEY_SELECT) {
++            Display d;
++            synchronized (Display.LCDUILock) {
++                d = getCurrentDisplay();
++            }
++            if (d != null && d.getWindow().textEditOk()) {
++                return;
++            }
++        }
++
+         synchronized (Display.LCDUILock) {
+             // IMPL NOTE: add back in the phone dial support after defining
+             // more system keys like 'send'
+@@ -1279,17 +1299,13 @@ class TextFieldLFImpl extends ItemLFImpl implements
+      */
+     private void handleClearKey(int keyCode, boolean longPress) {
+         if (isClearKey(keyCode)) {
+-            if (longPress) {
+-                if (tf.buffer.length() > 0) {
+-                    tf.delete(0, tf.buffer.length());
+-                    tf.notifyStateChanged();
+-                }
+-            } else {
+-                clear(cursor.index -
+-                      gePrevCursorIndex(tf.constraints,
+-                                        tf.buffer,
+-                                        cursor.index));
+-            }
++            // Holding the key auto-repeats (REPEAT_TIMEOUT/PERIOD) and
++            // deletes one character per repeat, Series 40 style, rather
++            // than wiping the whole text after the first 400 ms.
++            clear(cursor.index -
++                  gePrevCursorIndex(tf.constraints,
++                                    tf.buffer,
++                                    cursor.index));
+         }
+     }
+ 
+@@ -1592,8 +1608,10 @@ class TextFieldLFImpl extends ItemLFImpl implements
+             hidePTILayer();
+             hideKeyboardLayer();
+             currentDisplay.hidePopup(inputModeIndicator);
++            currentDisplay.getWindow().setTextEditMode(false);
+         } else if (oldDisplay != null) {
+             oldDisplay.hidePopup(inputModeIndicator);
++            oldDisplay.getWindow().setTextEditMode(false);
+             oldDisplay = null;
+         }
+         
+@@ -1609,13 +1627,13 @@ class TextFieldLFImpl extends ItemLFImpl implements
+     */
+     protected void enableLayers() {
+         boolean needToShow = false;
++        boolean inputOn;
+         Display currentDisplay;
+         synchronized (Display.LCDUILock) {
+             currentDisplay = getCurrentDisplay();
+             oldDisplay = currentDisplay;
+-            needToShow = showIMPopup && 
+-                inputModeIndicator.getDisplayMode() != null && 
+-                currentDisplay != null; 
++            inputOn = inputModeIndicator.getDisplayMode() != null;
++            needToShow = showIMPopup && inputOn && currentDisplay != null;
+             showIMPopup = false;
+         }
+         
+@@ -1625,6 +1643,10 @@ class TextFieldLFImpl extends ItemLFImpl implements
+             currentDisplay.showPopup(inputModeIndicator);
+             moveInputModeIndicator();
+         }
++        // Options / Clear soft keys while the field takes input
++        if (currentDisplay != null) {
++            currentDisplay.getWindow().setTextEditMode(inputOn);
++        }
+      }
+ 
+     /**

@@ -225,8 +225,9 @@ stock `fb_port.c` when `TARGET_DEVICE=jiophone`:
   `TextBox` or an editable `TextField` has the focus Chameleon's
   `SoftButtonLayer` switches to Series 40 style: left = **Options** (every
   command of the screen and the field, then **Cancel**), right = **Clear**
-  (backspace; held, it auto-repeats). With the menu open the keys read
-  Select / Back. The input mode still starts as `Abc`.
+  (backspace; held, it auto-repeats), centre key = **OK** (the OK type
+  command, else the first item/screen command). With the menu open the keys
+  read Select / Back. The input mode still starts as `Abc`.
 - **Device detection**: `LINUX_FB_JIOPHONE` is the compiled-in default for
   this target; `/proc/cpuinfo` containing `MSM8909`/`Qualcomm` selects it too,
   and `MIDP_FB_DEVICE=jiophone|omap730|zaurus|versatile` overrides.
