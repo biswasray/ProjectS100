@@ -2408,10 +2408,25 @@ index 0000000..a9dd28f
 +
 +constants_jiophone.xml
 diff --git a/midp/src/configuration/configuration_xml/linux_fb/properties.xml b/midp/src/configuration/configuration_xml/linux_fb/properties.xml
-index f86a0d6..11004dc 100644
+index f86a0d6..34d6971 100644
 --- a/midp/src/configuration/configuration_xml/linux_fb/properties.xml
 +++ b/midp/src/configuration/configuration_xml/linux_fb/properties.xml
-@@ -71,6 +71,14 @@
+@@ -48,8 +48,13 @@
+ 		Scope="internal"
+ 		Comment="The datagram port number of a SMS emulator."/>
+ 
++  <!-- JioPhone: this quota covers every file in appdb/ (all suite JARs,
++       RMS record stores, icon cache); the 1 MB default of the reference
++       port is exceeded by a single Opera Mini install and every
++       addRecord() then fails with RecordStoreFullException. /data has
++       gigabytes free, so allow 256 MB. -->
+   <property Key="system.jam_space"
+-		Value="1000000"
++		Value="268435456"
+ 		Scope="internal"
+ 		Comment="Amount of space to reserve for JAM storage."/>
+ 
+@@ -71,6 +76,14 @@
  		Scope="internal"
  		Comment="Default SMS Service Center address."/>
  
