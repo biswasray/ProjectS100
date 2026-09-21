@@ -51,6 +51,56 @@ index 7581ba5..3cb5188 100644
  # file/directory name separator ( / or \\\\ )
  # if the file separator is backslash, double-quoting is needed,
  # that is, you need to write "\\\\" (four backslashes) for "\" (one backslash)
+diff --git a/midp/src/ams/ams_base_cldc/reference/classes/com/sun/midp/main/CldcPlatformRequest.java b/midp/src/ams/ams_base_cldc/reference/classes/com/sun/midp/main/CldcPlatformRequest.java
+index 94011ab..ed2bffa 100644
+--- a/midp/src/ams/ams_base_cldc/reference/classes/com/sun/midp/main/CldcPlatformRequest.java
++++ b/midp/src/ams/ams_base_cldc/reference/classes/com/sun/midp/main/CldcPlatformRequest.java
+@@ -183,7 +183,7 @@ class CldcPlatformRequest implements PlatformRequest {
+          */
+         if (Configuration.getIntProperty(
+                 "useJavaInstallerForPlaformRequest", 0) != 0) {
+-            if (isMidletSuiteUrl(URL)) {
++            if (hasSuiteExtension(URL) || isMidletSuiteUrl(URL)) {
+                 return dispatchMidletSuiteUrl(URL);
+             }
+         }
+@@ -191,6 +191,36 @@ class CldcPlatformRequest implements PlatformRequest {
+         return dispatchPlatformRequest(URL);
+     }
+ 
++    /**
++     * Tells whether an HTTP(S) URL names a .jad or .jar by its path,
++     * before asking the server: download hosts often label a JAR
++     * application/octet-stream or a JAD text/plain, and some reject HEAD.
++     *
++     * @param url the URL passed to platformRequest
++     * @return true if the path ends in .jad or .jar (ignoring case, query
++     *         string and fragment)
++     */
++    private boolean hasSuiteExtension(String url) {
++        String u = url.toLowerCase();
++        int cut;
++
++        if (!u.startsWith("http://") && !u.startsWith("https://")) {
++            return false;
++        }
++
++        cut = u.indexOf('?');
++        if (cut != -1) {
++            u = u.substring(0, cut);
++        }
++
++        cut = u.indexOf('#');
++        if (cut != -1) {
++            u = u.substring(0, cut);
++        }
++
++        return u.endsWith(".jad") || u.endsWith(".jar");
++    }
++
+     /**
+      * Find out if the given URL is a JAD or JAR HTTP URL by performing a
+      * HTTP head request and checking the MIME type.
 diff --git a/midp/src/ams/appmanager_ui_resources/linux_fb/splash_screen_240x320.png b/midp/src/ams/appmanager_ui_resources/linux_fb/splash_screen_240x320.png
 new file mode 100644
 index 0000000000000000000000000000000000000000..a7f4c23ea15ad807b0a8fc8c7de8ee5aa78610b4
@@ -2074,6 +2124,34 @@ index b8ce7ec..8a8e62b 100644
          }
  
          return path;
+diff --git a/midp/src/ams/platform_request/linux_fb/native/midp_platform_request_md.c b/midp/src/ams/platform_request/linux_fb/native/midp_platform_request_md.c
+index b823932..391216b 100644
+--- a/midp/src/ams/platform_request/linux_fb/native/midp_platform_request_md.c
++++ b/midp/src/ams/platform_request/linux_fb/native/midp_platform_request_md.c
+@@ -24,6 +24,7 @@
+  * information or have any questions.
+  */
+ 
++#include <string.h>
+ #include <midp_properties_port.h>
+ #include <midpMalloc.h>
+ #include <midp_logging.h>
+@@ -49,7 +50,14 @@ static const char* const PLATFORM_REQUEST_KEY =
+  * @return true if the platform request is configured
+  */
+ int platformRequest(char* pszUrl) {
+-    (void)pszUrl;
++    /*
++     * JioPhone: no native browser, dialer or download manager to hand a
++     * URL to. JAD/JAR URLs never get here (CldcPlatformRequest routes
++     * them to the Java installer); everything else is refused so the
++     * MIDlet gets a ConnectionNotFoundException instead of silence.
++     * A cancel (empty URL) is always "handled".
++     */
++    return strlen(pszUrl) == 0;
+ #if 0
+     char *execargs[3];
+     STARTUPINFO si;
 diff --git a/midp/src/configuration/configuration_xml/linux_fb/constants.xml b/midp/src/configuration/configuration_xml/linux_fb/constants.xml
 index 79615fb..0eb7dbe 100644
 --- a/midp/src/configuration/configuration_xml/linux_fb/constants.xml
@@ -2329,6 +2407,25 @@ index 0000000..a9dd28f
 +# all file names there are relative to this file's directory
 +
 +constants_jiophone.xml
+diff --git a/midp/src/configuration/configuration_xml/linux_fb/properties.xml b/midp/src/configuration/configuration_xml/linux_fb/properties.xml
+index f86a0d6..11004dc 100644
+--- a/midp/src/configuration/configuration_xml/linux_fb/properties.xml
++++ b/midp/src/configuration/configuration_xml/linux_fb/properties.xml
+@@ -71,6 +71,14 @@
+ 		Scope="internal"
+ 		Comment="Default SMS Service Center address."/>
+ 
++  <!-- JioPhone: there is no native browser or download manager, so a
++       platformRequest() for a JAD/JAR URL (Opera Mini's "Open" on a
++       download) is handed to the Java installer -->
++  <property Key="useJavaInstallerForPlaformRequest"
++		Value="1"
++		Scope="internal"
++		Comment="When not zero, Java installer is launched to handle a midlet suite URL."/>
++
+ <!-- SYSTEM PROPERTIES -->
+ <!-- Visible from System.getProperty() -->
+   <property Key="path.separator" 
 diff --git a/midp/src/configuration/configuration_xml/share/i18n_constants.xml b/midp/src/configuration/configuration_xml/share/i18n_constants.xml
 index 8842f3c..ddde23a 100644
 --- a/midp/src/configuration/configuration_xml/share/i18n_constants.xml
