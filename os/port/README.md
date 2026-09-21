@@ -38,7 +38,7 @@ device without rebuilding.
 | Screen | Keys |
 |---|---|
 | **Idle** — wallpaper, big clock, date, operator line, profile | centre = Menu, left soft = Go to, right soft = Names, Call = dialled numbers, digits = dialer, Up/Down/Left/Right = My shortcuts, hold `#` = Silent, hold End = Switch off (exit to KaiOS), Menu then `*` = key lock |
-| **Menu** — 3x2 icon grid (or list) | arrows, 1–9 opens item n, Select / Exit |
+| **Menu** — 3-column icon grid (or list): the seven built-in entries followed by one tile per installed suite, with the JAR's icon (resized to the cell) or the default `s100_app` tile | arrows, 1–9 opens item n, Select / Exit; the grid scrolls by rows; a newly installed .jad/.jar appears as soon as the AMS reports it |
 | **Messaging** — Create message, Inbox, Drafts, Outbox, Sent items | multitap editor; Send files to Outbox (no SMS stack in this build) |
 | **Contacts** — Names, Add new, Memory status, Delete all | keypad letters jump in the list; Options: Call, Send message, Edit, Delete |
 | **Log** — Missed, Received, Dialled, Clear | Dialled is fed by the dialer |

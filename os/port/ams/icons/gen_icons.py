@@ -624,9 +624,26 @@ def icon_music(c):
     c.paint(notes, WHITE)
 
 
+def icon_app(c):
+    """Default icon of an installed MIDlet suite that ships none of its own:
+    a blue tile with a steaming Java cup (also drawn at 20 px for lists)."""
+    tile = rrect(4, 4, 32, 32, 6)
+    shadow(c, tile)
+    c.paint(tile, BLUE)
+    c.paint(minus(rrect(6, 6, 28, 12, 5), rect(0, 18, 40, 30)), WHITE, 0.22)
+    cup = rrect(11, 18, 15, 11, 2.5)
+    handle = minus(ring(26.5, 23, 2.2, 4.6), rect(15, 14, 11.5, 20))
+    saucer = rrect(9, 29.5, 19, 2.5, 1.2)
+    c.paint(union(cup, handle, saucer), WHITE)
+    c.paint(rrect(12.5, 19.5, 12, 3.5, 1.5), BLUE_L, 0.55)
+    steam = union(line(15, 15.5, 16.5, 11.5, 1.5), line(19.5, 15.5, 21, 11.5, 1.5))
+    c.paint(steam, WHITE, 0.85)
+
+
 SMALL_ICONS = {
     "s100_folder": 20, "s100_file": 20, "s100_file_image": 20, "s100_file_audio": 20,
     "s100_file_video": 20, "s100_file_java": 20, "s100_file_text": 20,
+    "s100_app_small": 20,
 }
 
 ICONS = {
@@ -676,6 +693,8 @@ ICONS = {
     "s100_location": icon_location,
     "s100_security": icon_security,
     "s100_music": icon_music,
+    "s100_app": icon_app,
+    "s100_app_small": icon_app,
 }
 
 

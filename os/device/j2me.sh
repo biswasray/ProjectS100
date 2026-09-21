@@ -130,7 +130,22 @@ b2g_start() {
     start b2g 2>/dev/null
 }
 
+# The static runtime cannot use the phone's resolver (no NSS), so it does
+# its own DNS from tmp/resolv.conf: seed it with the servers Gonk knows
+# about now; s100_net.sh rewrites it on every Wi-Fi/DNS change.
+write_resolv() {
+    d1=$(getprop net.dns1 2>/dev/null); d2=$(getprop net.dns2 2>/dev/null)
+    [ -n "$d1" ] || d1=$(getprop dhcp.wlan0.dns1 2>/dev/null)
+    [ -n "$d2" ] || d2=$(getprop dhcp.wlan0.dns2 2>/dev/null)
+    mkdir -p "$J2ME_HOME/tmp"
+    {
+        [ -n "$d1" ] && echo "nameserver $d1"
+        [ -n "$d2" ] && echo "nameserver $d2"
+    } > "$J2ME_HOME/tmp/resolv.conf"
+}
+
 run_vm() {
+    write_resolv
     echo "[$(date)] runMidlet $*" >> "$LOG"
     "$J2ME_HOME/bin/runMidlet" "$@" >> "$LOG" 2>&1
     rc=$?

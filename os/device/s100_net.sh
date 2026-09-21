@@ -199,6 +199,7 @@ wifi_connect() {
     wpa enable_network all >/dev/null
     [ "$s" = "COMPLETED" ] || err "could not join $ssid"
     if wifi_dhcp; then
+        resolv_write "$(prop dhcp.wlan0.dns1)" "$(prop dhcp.wlan0.dns2)"
         # Settings > Network > Private DNS overrides the DHCP servers
         [ -f "$DNS_CONF" ] && dns_apply >/dev/null 2>&1
         echo "state=connected"
@@ -578,8 +579,18 @@ dns_status() {
     echo "net2=$(prop net.dns2)"
 }
 
+# The Java runtime resolves names itself (static glibc, no NSS) from this
+# file: keep it in step with whatever the phone's resolver is set to.
+resolv_write() {
+    {
+        [ -n "$1" ] && echo "nameserver $1"
+        [ -n "$2" ] && [ "$2" != "$1" ] && echo "nameserver $2"
+    } > "$STATE_DIR/resolv.conf"
+}
+
 dns_push() {
     d1=$1; d2=$2
+    resolv_write "$d1" "$d2"
     setprop net.dns1 "$d1"
     setprop net.dns2 "$d2"
     setprop net.wlan0.dns1 "$d1"

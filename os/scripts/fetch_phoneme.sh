@@ -28,6 +28,7 @@ if [[ "${1:-}" == "--diff" ]]; then
     mkdir -p "$PATCHES"
     git diff --no-color --binary -- cldc preverifier > "$PATCHES/0001-toolchain-modern-gcc-and-x86_64-host.patch"
     git diff --no-color --binary -- midp            > "$PATCHES/0002-midp-jiophone-linux-fb-port.patch"
+    git diff --no-color --binary -- pcsl            > "$PATCHES/0003-pcsl-static-dns-resolver.patch"
     for p in "$PATCHES"/*.patch; do
         [[ -s "$p" ]] || rm -f "$p"
     done

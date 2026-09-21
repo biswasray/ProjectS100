@@ -89,7 +89,7 @@ class AppsMenu {
             Vector v = shell.ams.userSuites();
             for (int i = 0; i < v.size(); i++) {
                 RunningMIDletSuiteInfo si = (RunningMIDletSuiteInfo) v.elementAt(i);
-                Item it = new Item(si.displayName, si).icon(si.icon);
+                Item it = new Item(si.displayName, si).icon(Icons.appIcon(si, Icons.ROW));
                 if (si.hasRunningMidlet()) {
                     it.value = "running";
                 } else if (!si.enabled) {
@@ -157,7 +157,7 @@ class AppsMenu {
                     if (!si.hasSingleMidlet() && ps[j].getDisplayName() != null) {
                         name = ps[j].getDisplayName();
                     }
-                    add(new Item(name, ps[j]).icon(si.icon));
+                    add(new Item(name, ps[j]).icon(Icons.appIcon(si, Icons.ROW)));
                 }
             }
         }

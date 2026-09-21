@@ -1,0 +1,226 @@
+diff --git a/pcsl/network/bsd/pcsl_network.c b/pcsl/network/bsd/pcsl_network.c
+index b32e852..014e069 100644
+--- a/pcsl/network/bsd/pcsl_network.c
++++ b/pcsl/network/bsd/pcsl_network.c
+@@ -63,6 +63,182 @@
+ 
+ int lastError; /* For pcsl_network_error use. */
+ 
++/*
++ * S100: the runtime is one static glibc binary and gethostbyname() in a
++ * static glibc dlopen()s the NSS modules, which this phone does not have,
++ * so every lookup fails with "server not found". Resolve names here with
++ * a plain UDP DNS query instead. The servers come, resolv.conf style
++ * ("nameserver a.b.c.d"), from the first of $MIDP_RESOLV_CONF,
++ * $MIDP_HOME/tmp/resolv.conf (written by j2me.sh and s100_net.sh from
++ * the phone's net.dns* properties) and /etc/resolv.conf that lists any;
++ * public resolvers are the last resort.
++ */
++#include <poll.h>
++#include <time.h>
++
++#define S100_DNS_MAX_SERVERS 4
++#define S100_DNS_TIMEOUT_MS  3000
++#define S100_DNS_PKT         512
++
++static int s100_dns_servers(struct in_addr *srv, int max) {
++    const char *files[3];
++    char path[256];
++    const char *home = getenv("MIDP_HOME");
++    int i, n = 0;
++
++    files[0] = getenv("MIDP_RESOLV_CONF");
++    files[1] = NULL;
++    files[2] = "/etc/resolv.conf";
++    if (home != NULL) {
++        snprintf(path, sizeof(path), "%s/tmp/resolv.conf", home);
++        files[1] = path;
++    }
++    for (i = 0; i < 3 && n == 0; i++) {
++        FILE *f;
++        char line[256], ip[64];
++
++        if (files[i] == NULL || (f = fopen(files[i], "r")) == NULL) {
++            continue;
++        }
++        while (n < max && fgets(line, sizeof(line), f) != NULL) {
++            if (sscanf(line, "nameserver %63s", ip) == 1
++                    && inet_aton(ip, &srv[n])) {
++                n++;
++            }
++        }
++        fclose(f);
++    }
++    if (n == 0) {
++        inet_aton("8.8.8.8", &srv[n++]);
++        if (n < max) {
++            inet_aton("1.1.1.1", &srv[n++]);
++        }
++    }
++    return n;
++}
++
++/* Skips a (possibly compressed) name in a DNS message; -1 on overrun. */
++static int s100_dns_skip_name(const unsigned char *m, int len, int pos) {
++    while (pos < len) {
++        int c = m[pos];
++        if (c == 0) {
++            return pos + 1;
++        }
++        if ((c & 0xC0) == 0xC0) {
++            return pos + 2 <= len ? pos + 2 : -1;
++        }
++        pos += c + 1;
++    }
++    return -1;
++}
++
++/* One A query to one server; 0 and the 4 address bytes in out on success. */
++static int s100_dns_query_a(const char *host, struct in_addr server,
++                            unsigned char *out) {
++    unsigned char q[S100_DNS_PKT], r[S100_DNS_PKT];
++    struct sockaddr_in sa;
++    struct pollfd pfd;
++    unsigned short id = (unsigned short)(getpid() ^ (int)time(NULL));
++    int fd, qlen, len, pos, i, ancount;
++    const char *p = host;
++
++    if (strlen(host) > 253) {
++        return -1;
++    }
++    memset(q, 0, 12);
++    q[0] = id >> 8; q[1] = id & 0xFF;
++    q[2] = 0x01;                          /* RD */
++    q[5] = 1;                             /* QDCOUNT */
++    qlen = 12;
++    while (*p != '\0') {
++        const char *dot = strchr(p, '.');
++        int l = dot != NULL ? (int)(dot - p) : (int)strlen(p);
++        if (l < 1 || l > 63) {
++            return -1;
++        }
++        q[qlen++] = (unsigned char)l;
++        memcpy(q + qlen, p, l);
++        qlen += l;
++        p += l;
++        if (*p == '.') {
++            p++;
++        }
++    }
++    q[qlen++] = 0;
++    q[qlen++] = 0; q[qlen++] = 1;         /* QTYPE A */
++    q[qlen++] = 0; q[qlen++] = 1;         /* QCLASS IN */
++
++    fd = socket(AF_INET, SOCK_DGRAM, 0);
++    if (fd < 0) {
++        return -1;
++    }
++    memset(&sa, 0, sizeof(sa));
++    sa.sin_family = AF_INET;
++    sa.sin_port = htons(53);
++    sa.sin_addr = server;
++    len = -1;
++    if (sendto(fd, q, qlen, 0, (struct sockaddr *)&sa, sizeof(sa)) == qlen) {
++        pfd.fd = fd;
++        pfd.events = POLLIN;
++        if (poll(&pfd, 1, S100_DNS_TIMEOUT_MS) > 0) {
++            len = recv(fd, r, sizeof(r), 0);
++        }
++    }
++    close(fd);
++
++    if (len < 12 || r[0] != q[0] || r[1] != q[1] || (r[2] & 0x80) == 0
++            || (r[3] & 0x0F) != 0) {
++        return -1;
++    }
++    ancount = (r[6] << 8) | r[7];
++    pos = 12;
++    for (i = (r[4] << 8) | r[5]; i > 0; i--) {   /* questions */
++        pos = s100_dns_skip_name(r, len, pos);
++        if (pos < 0) {
++            return -1;
++        }
++        pos += 4;
++    }
++    for (i = 0; i < ancount; i++) {              /* answers */
++        int type, rdlen;
++        pos = s100_dns_skip_name(r, len, pos);
++        if (pos < 0 || pos + 10 > len) {
++            return -1;
++        }
++        type = (r[pos] << 8) | r[pos + 1];
++        rdlen = (r[pos + 8] << 8) | r[pos + 9];
++        pos += 10;
++        if (pos + rdlen > len) {
++            return -1;
++        }
++        if (type == 1 && rdlen == 4) {
++            memcpy(out, r + pos, 4);
++            return 0;
++        }
++        pos += rdlen;                            /* CNAME etc.: keep going */
++    }
++    return -1;
++}
++
++/* Fills the 4 IPv4 address bytes for host; 0 on success. */
++static int s100_resolve(const char *host, unsigned char *out) {
++    struct in_addr srv[S100_DNS_MAX_SERVERS], a;
++    int i, n;
++
++    if (inet_aton(host, &a)) {
++        memcpy(out, &a, 4);
++        return 0;
++    }
++    n = s100_dns_servers(srv, S100_DNS_MAX_SERVERS);
++    for (i = 0; i < n; i++) {
++        if (s100_dns_query_a(host, srv[i], out) == 0) {
++            return 0;
++        }
++    }
++    return -1;
++}
++
++
+ /**
+  * Returns name of network interface which is meant as a primary
+  * way of connecting to this device from an external system.
+@@ -89,32 +265,18 @@ int pcsl_network_gethostbyname_start(
+ 	void **pHandle,
+ 	void **pContext)
+ {
+-    struct hostent *hp;
+-    int realLen;
+-
+     (void)pHandle;
+     (void)pContext;
+ 
+-    hp = gethostbyname(hostname);
+-    lastError = errno;
+-    if (NULL == hp) {
+-        return PCSL_NET_IOERROR;
++    if (maxLen < 4) {
++        return PCSL_NET_INVALID;
+     }
+-
+-    if (hp->h_addrtype == AF_INET) {
+-        realLen = 4;	/* IPv4 */
+-    } else if (hp->h_addrtype == AF_INET6) {
+-        realLen = 16;   /* IMPL NOTE - IPv6 not supported, yet. */
+-    } else {
++    /* IPv4 only; see s100_resolve above for why not gethostbyname() */
++    if (s100_resolve(hostname, pAddress) != 0) {
++        lastError = errno;
+         return PCSL_NET_IOERROR;
+     }
+-
+-    if (realLen > maxLen) {
+-        return PCSL_NET_INVALID;
+-    }
+-
+-    memcpy(pAddress, hp->h_addr_list[0], realLen);
+-    *pLen = realLen;
++    *pLen = 4;
+     return PCSL_NET_SUCCESS;
+ }
+ 

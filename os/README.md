@@ -6,8 +6,10 @@ evdev keypad**, with KaiOS/Gecko (`b2g`) stopped. No browser, no JS VM: the
 Java bytecode runs on a JIT-ing ARM VM and paints straight into the LCD. It
 feels like a J2ME feature phone OS: the **S100 shell** in `os/port/` (a
 Nokia Series 40 style idle screen, icon menu, dialer, contacts, messaging,
-settings, organiser) replaces phoneME's application manager UI, and the
-`.jad`/`.jar` suites you install show up under Applications > Collection.
+settings, organiser) replaces phoneME's application manager UI, and every
+`.jad`/`.jar` suite you install gets its own tile on the main menu (with the
+icon from the JAR, or a default app icon) as well as an entry under
+Applications > Collection.
 
 This is the "much more work" option from the project plan, so read the
 **Status** section before expecting a finished product. New here? Start with
@@ -41,7 +43,7 @@ fresh PC to Java on the phone; this file is the reference behind it.
 | Settings > Network (SIM card management, Airplane mode, VPN, Private DNS), Settings > Location (live GPS), Settings > Security (phone lock, keyguard code, auto keyguard), Music player (WAV/MP3), Video player (camera AVI clips) | **added 2026-09-21, not yet tested on the phone**. Backends chosen from a read-only probe: `rild-debug` socket for radio power/data (`device/sockctl.c`), `garden_app -n` for NMEA fixes, `tinymix` + direct ALSA (`pcmC0D0p`) for sound (`port/.../native/s100_media.c`, bundled minimp3). VPN: only `racoon` exists (no `mtpd`/`pppd`), so IPsec Xauth is best effort and PPTP/L2TP are refused |
 | Key map | **verified**: `device/keymap.txt` matches the phone's `matrix_keypad.kl` code for code |
 | On-device launcher, deploy, probe, screenshot scripts | **work on hardware** (with the `gsu` helper, see *Root without capabilities*) |
-| Networking | sockets are compiled in, but `gethostbyname` in a static glibc binary has no NSS -> **DNS will not resolve** on the phone until PCSL gets its own resolver (IP literals work) |
+| Networking | sockets + HTTP work over Wi-Fi; PCSL has its own UDP DNS client (patch 0003) because `gethostbyname` in a static glibc has no NSS — servers come from `/data/j2me/tmp/resolv.conf`, kept in step with `net.dns*` by the scripts. IPv4 only |
 | Telephony / SMS / audio (JSR-120/135) | not started |
 | Boot straight into Java (init.rc service) | not started; `j2me.sh` is started from adb for now |
 
@@ -90,7 +92,9 @@ os/
   docs/                     emulator screenshots
   patches/
     0001-toolchain-...      cldc/preverifier fixes for gcc 13 / x86_64 hosts / glibc 2.39
-    0002-midp-jiophone-...  the JioPhone linux_fb port + device config
+    0002-midp-jiophone-...  the JioPhone linux_fb port + device config;
+                            FileInstaller fetches http(s) JAR URLs from local JADs
+    0003-pcsl-static-dns... UDP DNS resolver in pcsl/network/bsd (no NSS in static glibc)
   device/
     j2me.sh                 on-phone launcher (stops b2g, runs the AMS / a suite / installer)
     s100_net.sh             Wi-Fi / hotspot / USB / Bluetooth / SIM+radio / airplane / DNS / VPN
@@ -240,8 +244,11 @@ Series 40 style shell written against LCDUI `Canvas` and romized into
   shortcuts, long `#` = Silent, long End = "Switch off?" (exit to KaiOS),
   Menu-then-`*` locks the keypad.
 - **Menu manager** (`MenuManager`, `MenuItem`, `MenuScreen`): a tree of
-  ids → labels/icons/actions built from the feature modules; the main menu
-  is a 3-column icon grid (or a list), submenus are lists, 1–9 open items.
+  ids → labels/icons/actions built from the feature modules plus one
+  `app.<suiteId>` entry per installed suite (rebuilt on every AMS suite
+  event, so a fresh install appears at once); the main menu is a 3-column
+  icon grid that scrolls by rows (or a list), submenus are lists, 1–9 open
+  items.
 - **Keymap** (`Keymap`): the MIDP key codes of the fb port
   (`keymap_input.h`) mapped to shell keys, long-press detection in `Shell`,
   and the idle-screen shortcut table (Settings > My shortcuts).
@@ -263,8 +270,8 @@ Series 40 style shell written against LCDUI `Canvas` and romized into
 
 *The shell under `emu.sh` (the real ARM binary on qemu): idle screen,
 main menu, Settings, Applications, dialer, Names, message editor,
-calculator. Installed suites open from Applications > Collection and End
-brings you back to the shell.*
+calculator. Installed suites open from their main-menu tile (or
+Applications > Collection) and End brings you back to the shell.*
 
 Details, key table and how to extend it: [`port/README.md`](port/README.md).
 
@@ -358,11 +365,9 @@ re-enumerates USB — expect adb to drop for a few seconds.
 2. Boot into Java: add an `init.rc` service (`service j2me /data/j2me/j2me.sh`,
    `class late_start`) to the rooted boot via `tools/patch_boot.py`, and either
    disable `b2g` there or keep it as the fallback the AMS can switch back to.
-3. Networking: sockets to IP literals should work over the data connection
-   Gonk already brings up, but name resolution needs a resolver that does not
-   depend on glibc NSS (static binary): either build a tiny DNS client into
-   `pcsl/network/bsd/generic` (`gethostbyname` -> UDP query to the server in
-   `/etc/resolv.conf` / `getprop net.dns1`) or link against bionic instead.
+3. Networking: done for IPv4 (patch 0003 gives PCSL its own UDP resolver;
+   the scripts keep `tmp/resolv.conf` in step with `net.dns*`). Still open:
+   AAAA records, search domains, and a DNS-over-TLS stub for Private DNS.
 4. JSR-120 (SMS) / JSR-135 (audio) — phoneME has the API layers; the
    `javacall` backends would need Gonk `rild`/`tinyalsa` glue. Large.
 5. Battery/idle: screen blanking timer and CPU governor handling in the port.

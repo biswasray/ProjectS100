@@ -2021,6 +2021,39 @@ index 55f051d..494b213 100644
      }
  
      filesep = getCharFileSeparator();
+diff --git a/midp/src/ams/installer/reference/classes/com/sun/midp/installer/FileInstaller.java b/midp/src/ams/installer/reference/classes/com/sun/midp/installer/FileInstaller.java
+index 69076ec..b81ebcb 100644
+--- a/midp/src/ams/installer/reference/classes/com/sun/midp/installer/FileInstaller.java
++++ b/midp/src/ams/installer/reference/classes/com/sun/midp/installer/FileInstaller.java
+@@ -37,9 +37,12 @@ import com.sun.midp.io.FileUrl;
+ /**
+  * An Installer allowing to install a midlet suite from a file.
+  * If the midlet suite is given by a descriptor file, the jar
+- * URL specified in the descriptor must have a "file" scheme.
++ * URL specified in the descriptor may have a "file" scheme, be a
++ * path relative to the descriptor, or (as on Series 40 phones)
++ * point at an http/https server, in which case the JAR is fetched
++ * over the network by the inherited HttpInstaller code.
+  */
+-public class FileInstaller extends Installer {
++public class FileInstaller extends HttpInstaller {
+     /** Number of bytes to read at one time when copying a file. */
+     private static final int CHUNK_SIZE = 10 * 1024;
+     
+@@ -115,6 +118,13 @@ public class FileInstaller extends Installer {
+         InputConnection conn;
+         RandomAccessStream jarOutputStream;
+ 
++        // A local JAD may still name a remote JAR (OTA descriptors saved to
++        // the phone); download it like an http install would.
++        if (info.jarUrl.startsWith("http://")
++                || info.jarUrl.startsWith("https://")) {
++            return super.downloadJAR(filename);
++        }
++
+         // If jad attribute 'Midlet-Jar-Url' begins with schema 'file:///',
+         // than get jar path from this jad attribute,
+         // else searching jar file in same directory as a jad file.
 diff --git a/midp/src/ams/installer/reference/classes/com/sun/midp/installer/Installer.java b/midp/src/ams/installer/reference/classes/com/sun/midp/installer/Installer.java
 index b8ce7ec..8a8e62b 100644
 --- a/midp/src/ams/installer/reference/classes/com/sun/midp/installer/Installer.java

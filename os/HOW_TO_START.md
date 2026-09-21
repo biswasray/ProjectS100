@@ -138,8 +138,10 @@ bash os/scripts/fetch_phoneme.sh
 
 This shallow-clones `github.com/magicus/phoneME` into `os/phoneME/`
 (gitignored) and applies `os/patches/0001-*.patch` (VM/toolchain fixes,
-including the EABI `cacheflush` fix the phone needs) and `0002-*.patch` (the
-JioPhone framebuffer/keypad port). The **patches are the source of truth**:
+including the EABI `cacheflush` fix the phone needs), `0002-*.patch` (the
+JioPhone framebuffer/keypad port) and `0003-*.patch` (PCSL's own DNS
+resolver, since a static glibc has no NSS). The **patches are the source of
+truth**:
 if you edit anything under `os/phoneME/`, regenerate them with
 `bash os/scripts/fetch_phoneme.sh --diff` and commit the `.patch` files.
 
@@ -314,7 +316,7 @@ Where things live inside `os/phoneME/` (see `README.md` for the full list):
 | adb vanished right after exiting the AMS | normal: b2g restart re-enumerates USB; wait ~5 s |
 | Phone stuck with b2g stopped (no KaiOS, no Java) | `adb shell "/s60su -c '/data/j2me/bin/gsu -c \"start b2g\"'"` or `ams_stop.sh`; worst case hold Power to reboot — nothing here survives a reboot except the files in `/data/j2me` |
 | Text file busy on deploy | `ams_stop.sh` first |
-| A Java exception in `j2me.log` mentioning DNS / UnknownHost | expected for now: static glibc has no NSS; use IP literals (roadmap item) |
+| A Java exception in `j2me.log` mentioning DNS / UnknownHost, or an install fails with "server not found" | the runtime resolves names itself from `/data/j2me/tmp/resolv.conf` (written from `net.dns*` by `j2me.sh` and `s100_net.sh`); check it lists a reachable server, or set one under Settings > Network > Private DNS |
 
 Nothing in this folder touches the boot partition, modem or KaiOS files —
 undoing everything is `adb shell "/s60su -c '/data/j2me/bin/gsu -c \"rm -rf /data/j2me\"'"`

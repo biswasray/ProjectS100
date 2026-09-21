@@ -5,6 +5,11 @@
  * Organiser, Applications, Camera) from the feature modules, opens items
  * (submenu -> MenuScreen, leaf -> action) and resolves the ids that the
  * idle-screen shortcuts (Keymap) and openId() use.
+ *
+ * Every installed MIDlet suite is also a main-menu entry ("app.<suiteId>",
+ * icon from the JAR or the default app tile, see Icons.appIcon) right after
+ * the built-in ones, so a freshly installed .jad/.jar shows up in the Menu
+ * at once: AppManagerUIImpl calls appsChanged() on every suite event.
  */
 
 package com.sun.midp.appmanager;
@@ -28,6 +33,8 @@ class MenuManager {
     final MediaPlayer media;
 
     private MenuItem root;
+    /** The fixed part of the main menu, built once. */
+    private MenuItem[] builtin;
 
     MenuManager(Shell shell) {
         this.shell = shell;
@@ -48,7 +55,15 @@ class MenuManager {
 
     MenuItem root() {
         if (root == null) {
-            root = new MenuItem("menu", "Menu", null, new MenuItem[] {
+            root = new MenuItem("menu", "Menu", null, (MenuItem[]) null);
+            root.children = buildRoot();
+        }
+        return root;
+    }
+
+    private MenuItem[] buildRoot() {
+        if (builtin == null) {
+            builtin = new MenuItem[] {
                 new MenuItem("messaging", "Messaging", "messaging", messaging.items()),
                 new MenuItem("contacts", "Contacts", "contacts", contacts.items()),
                 new MenuItem("log", "Log", "log", log.items()),
@@ -56,9 +71,44 @@ class MenuManager {
                 new MenuItem("organiser", "Organiser", "organiser", organiser.items()),
                 new MenuItem("applications", "Applications", "applications", apps.items()),
                 camera.item(),
-            });
+            };
         }
-        return root;
+        Vector v = new Vector();
+        for (int i = 0; i < builtin.length; i++) {
+            v.addElement(builtin[i]);
+        }
+        Vector suites = shell.ams.userSuites();
+        for (int i = 0; i < suites.size(); i++) {
+            v.addElement(appItem((RunningMIDletSuiteInfo) suites.elementAt(i)));
+        }
+        MenuItem[] out = new MenuItem[v.size()];
+        v.copyInto(out);
+        return out;
+    }
+
+    /** Main-menu entry of one installed suite. */
+    private MenuItem appItem(final RunningMIDletSuiteInfo si) {
+        MenuItem it = new MenuItem(appId(si), si.displayName, "app", new Runnable() {
+            public void run() { shell.ams.open(si); }
+        });
+        it.image = Icons.appIcon(si, Icons.SIZE);
+        it.rowImage = Icons.appIcon(si, Icons.ROW);
+        return it;
+    }
+
+    static String appId(RunningMIDletSuiteInfo si) {
+        return "app." + si.suiteId;
+    }
+
+    /**
+     * A suite was installed, removed or got a new icon: rebuild the main
+     * menu in place (the MenuScreen on the stack keeps pointing at root
+     * and re-reads its children in refresh()).
+     */
+    void appsChanged() {
+        if (root != null) {
+            root.children = buildRoot();
+        }
     }
 
     /** Opens the main menu from the idle screen. */

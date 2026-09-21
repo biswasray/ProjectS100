@@ -287,6 +287,15 @@ class AppManagerUIImpl implements AppManagerUI, CommandListener {
         shell.repaint();
     }
 
+    /**
+     * The set of installed suites (or one of their names/icons) changed:
+     * rebuild the main menu, then whatever list is on top.
+     */
+    private void suitesChanged() {
+        shell.menus.appsChanged();
+        refreshTop();
+    }
+
     private void askUserIfLaunchMidlet() {
         if (!appManager.getAndResetRunMIDletQuestionFlag()) {
             return;
@@ -310,12 +319,12 @@ class AppManagerUIImpl implements AppManagerUI, CommandListener {
 
     public void itemAppended(RunningMIDletSuiteInfo suiteInfo) {
         suites.addElement(suiteInfo);
-        refreshTop();
+        suitesChanged();
     }
 
     public void itemRemoved(RunningMIDletSuiteInfo suiteInfo) {
         suites.removeElement(suiteInfo);
-        refreshTop();
+        suitesChanged();
     }
 
     public void notifyInternalMidletStarted(MIDletProxy midlet) {
@@ -374,11 +383,11 @@ class AppManagerUIImpl implements AppManagerUI, CommandListener {
     }
 
     public void notifyMIDletSuiteEnabled(RunningMIDletSuiteInfo si) {
-        refreshTop();
+        suitesChanged();
     }
 
     public void notifyMIDletSuiteIconChaged(RunningMIDletSuiteInfo si) {
-        refreshTop();
+        suitesChanged();
     }
 
     public void notifyMidletStartError(int suiteId, String className, int errorCode,
@@ -436,7 +445,11 @@ class AppManagerUIImpl implements AppManagerUI, CommandListener {
 
     public void notifyMIDletSuiteStateChanged(RunningMIDletSuiteInfo si,
                                               RunningMIDletSuiteInfo newSi) {
-        shell.repaint();
+        // the peer copies newSi into si right after this call (new name,
+        // icon...): pick the changes up once it is done
+        display.callSerially(new Runnable() {
+            public void run() { suitesChanged(); }
+        });
     }
 
     public void setCurrentItem(RunningMIDletSuiteInfo item) {
