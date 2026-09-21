@@ -12,6 +12,8 @@
 #   wifi status|on|off|scan|saved|disconnect
 #   wifi connect <ssid> [password]      (empty password = open network)
 #   wifi forget <ssid>
+#   wifi route                          (re)install the default route + DNS
+#   wifi up                             DHCP + route again for a joined link
 #   hotspot status|off
 #   hotspot on <ssid> <password|-> [channel]
 #   usb status
@@ -41,6 +43,8 @@ LEASES=/data/misc/dhcp/dnsmasq.leases
 SOCKCTL=/data/j2me/bin/sockctl
 DNS_CONF=$CONF_DIR/s100_dns.txt
 VPN_STATE=/data/misc/vpn/state
+# netd network id for the Wi-Fi link (see wifi_route)
+NETID=100
 
 mkdir -p "$STATE_DIR" 2>/dev/null
 
@@ -89,6 +93,7 @@ wifi_status() {
     echo "ip=$ip"
     echo "gateway=$([ -n "$ip" ] && prop dhcp.wlan0.gateway)"
     echo "dns=$([ -n "$ip" ] && prop dhcp.wlan0.dns1)"
+    echo "route=$(ip route show table $IFACE 2>/dev/null | grep -q '^default' && echo yes || echo no)"
     bssid=$(echo "$st" | grep '^bssid=' | cut -d= -f2)
     sig=""
     if [ -n "$bssid" ]; then
@@ -123,6 +128,7 @@ wifi_off() {
         hotspot_off >/dev/null
     fi
     setprop ctl.stop dhcpcd_wlan0
+    wifi_route_down
     if wpa_running; then
         wpa disconnect >/dev/null
         setprop ctl.stop wpa_supplicant
@@ -164,6 +170,49 @@ wifi_dhcp() {
     return 1
 }
 
+# dhcpcd only fills the dhcp.wlan0.* properties: on Gonk it is the
+# NetworkManager (Gecko, stopped while Java runs) that turns them into
+# routes. netd routes by policy (ip rule ends in "unreachable"; the main
+# table is only consulted for uid 0 and there is no default route in it
+# either), so build the network the way Gecko does: a netd network for
+# wlan0 with the DHCP gateway as default route, made the default network
+# and given the resolver servers. Idempotent - every step is allowed to
+# fail because the network may exist already.
+wifi_route() {
+    gw=$(prop dhcp.wlan0.gateway)
+    [ -n "$gw" ] || return 1
+    ndc network create $NETID >/dev/null 2>&1
+    ndc network interface add $NETID $IFACE >/dev/null 2>&1
+    ndc network route add $NETID $IFACE 0.0.0.0/0 "$gw" >/dev/null 2>&1
+    ndc network default set $NETID >/dev/null 2>&1
+    d1=$(prop dhcp.wlan0.dns1); d2=$(prop dhcp.wlan0.dns2)
+    [ -n "$d1" ] && ndc resolver setnetdns $NETID "" $d1 $d2 >/dev/null 2>&1
+    ip route show table $IFACE 2>/dev/null | grep -q '^default'
+}
+
+wifi_route_down() {
+    ndc network default clear >/dev/null 2>&1
+    ndc network destroy $NETID >/dev/null 2>&1
+}
+
+# Called by j2me.sh at every VM start: a link joined in an earlier session
+# is still associated, but Gecko may have killed dhcpcd and the route has
+# gone (it lives in netd's network, which Gecko rebuilds its own way).
+wifi_up() {
+    wpa_running || { echo "state=off"; return 0; }
+    s=$(wpa status | grep '^wpa_state=' | cut -d= -f2)
+    [ "$s" = "COMPLETED" ] || { echo "state=disconnected"; return 0; }
+    if [ "$(prop init.svc.dhcpcd_wlan0)" != "running" ] ||
+       [ "$(prop dhcp.wlan0.result)" != "ok" ]; then
+        wifi_dhcp || err "no address"
+    fi
+    wifi_route || err "no default route"
+    resolv_write "$(prop dhcp.wlan0.dns1)" "$(prop dhcp.wlan0.dns2)"
+    [ -f "$DNS_CONF" ] && dns_apply >/dev/null 2>&1
+    echo "state=connected"
+    echo "ip=$(prop dhcp.wlan0.ipaddress)"
+}
+
 wifi_connect() {
     ssid=$1; psk=$2
     [ -n "$ssid" ] || err "no network name"
@@ -199,11 +248,13 @@ wifi_connect() {
     wpa enable_network all >/dev/null
     [ "$s" = "COMPLETED" ] || err "could not join $ssid"
     if wifi_dhcp; then
+        wifi_route || err "no route through $ssid"
         resolv_write "$(prop dhcp.wlan0.dns1)" "$(prop dhcp.wlan0.dns2)"
         # Settings > Network > Private DNS overrides the DHCP servers
         [ -f "$DNS_CONF" ] && dns_apply >/dev/null 2>&1
         echo "state=connected"
         echo "ip=$(prop dhcp.wlan0.ipaddress)"
+        echo "gateway=$(prop dhcp.wlan0.gateway)"
     else
         err "no address from $ssid"
     fi
@@ -221,6 +272,7 @@ wifi_forget() {
 wifi_disconnect() {
     wpa_running || err "Wi-Fi is off"
     setprop ctl.stop dhcpcd_wlan0
+    wifi_route_down
     wpa disconnect >/dev/null
     echo "state=disconnected"
 }
@@ -266,6 +318,7 @@ hotspot_on() {
     up=$(upstream)
     # leave station mode
     setprop ctl.stop dhcpcd_wlan0
+    wifi_route_down
     if wpa_running; then
         wpa disconnect >/dev/null
         setprop ctl.stop wpa_supplicant
@@ -561,8 +614,9 @@ airplane_off() {
 # ----------------------------------------------------------------- dns ----
 #
 # "Private DNS" in Java mode = the resolver servers of the phone: netd's
-# resolver for the Wi-Fi network (both the netId and the old per-interface
-# syntax are tried), the net.dns* properties Gonk daemons read, and the
+# resolver for the Wi-Fi network (our netId, a few others Gecko may have
+# left, and the old per-interface syntax), the net.dns* properties Gonk
+# daemons read, and the
 # hotspot's forwarders. There is no DNS-over-TLS stub here, so the
 # provider is reached in the clear on port 53.
 
@@ -601,7 +655,7 @@ dns_push() {
     done
     ndc resolver setifdns $IFACE "" $d1 $d2 >/dev/null 2>&1
     ndc resolver setdefaultif $IFACE >/dev/null 2>&1
-    ndc resolver flushnet 100 >/dev/null 2>&1
+    ndc resolver flushnet $NETID >/dev/null 2>&1
     ndc resolver flushdefaultif >/dev/null 2>&1
     if [ -f "$STATE_DIR/hotspot.on" ]; then
         ndc tether dns set 0 $d1 $d2 >/dev/null 2>&1
@@ -766,6 +820,8 @@ case "$group.$cmd" in
     wifi.connect)     wifi_connect "$1" "$2" ;;
     wifi.forget)      wifi_forget "$1" ;;
     wifi.disconnect)  wifi_disconnect ;;
+    wifi.route)       wifi_route && echo "state=ok" || err "no default route" ;;
+    wifi.up)          wifi_up ;;
     hotspot.status)   hotspot_status ;;
     hotspot.on)       hotspot_on "$1" "$2" "$3" ;;
     hotspot.off)      hotspot_off ;;

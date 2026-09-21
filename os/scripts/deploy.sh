@@ -32,6 +32,13 @@ adb shell "/s60su -c id" | grep -q "uid=0" || { echo "[x] /s60su not giving root
 GSU=$STAGE/bin/gsu
 su() { adb shell "/s60su -c '$GSU -c \"$*\"'"; }
 
+# the device-side scripts are plain files: take the current ones from
+# device/ so a script fix never needs (or waits for) a repackage
+for f in "$OS_DIR"/device/*.sh; do
+    tr -d '' < "$f" > "$OUT/$(basename "$f")"
+done
+cp "$OS_DIR/device/keymap.txt" "$OUT/keymap.txt"
+
 echo "[*] pushing runtime ($(du -sh "$OUT" | cut -f1)) to $STAGE"
 # adb push runs as shell; /data/local/tmp is the only place it may write
 adb shell "rm -rf $STAGE"

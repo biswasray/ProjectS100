@@ -144,7 +144,18 @@ write_resolv() {
     } > "$J2ME_HOME/tmp/resolv.conf"
 }
 
+# Wi-Fi joined in an earlier session is still associated, but the KaiOS
+# stack that ran in between may have killed dhcpcd and the route is gone:
+# s100_net.sh puts both back (no-op when Wi-Fi is off).
+wifi_up() {
+    [ "$(getprop init.svc.wpa_supplicant 2>/dev/null)" = "running" ] || return
+    [ -x "$J2ME_HOME/s100_net.sh" ] || return
+    echo "[$(date)] wifi up: $("$J2ME_HOME/s100_net.sh" wifi up 2>&1 | tr '
+' ' ')" >> "$LOG"
+}
+
 run_vm() {
+    wifi_up
     write_resolv
     echo "[$(date)] runMidlet $*" >> "$LOG"
     "$J2ME_HOME/bin/runMidlet" "$@" >> "$LOG" 2>&1

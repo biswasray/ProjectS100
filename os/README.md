@@ -43,7 +43,7 @@ fresh PC to Java on the phone; this file is the reference behind it.
 | Settings > Network (SIM card management, Airplane mode, VPN, Private DNS), Settings > Location (live GPS), Settings > Security (phone lock, keyguard code, auto keyguard), Music player (WAV/MP3), Video player (camera AVI clips) | **added 2026-09-21, not yet tested on the phone**. Backends chosen from a read-only probe: `rild-debug` socket for radio power/data (`device/sockctl.c`), `garden_app -n` for NMEA fixes, `tinymix` + direct ALSA (`pcmC0D0p`) for sound (`port/.../native/s100_media.c`, bundled minimp3). VPN: only `racoon` exists (no `mtpd`/`pppd`), so IPsec Xauth is best effort and PPTP/L2TP are refused |
 | Key map | **verified**: `device/keymap.txt` matches the phone's `matrix_keypad.kl` code for code |
 | On-device launcher, deploy, probe, screenshot scripts | **work on hardware** (with the `gsu` helper, see *Root without capabilities*) |
-| Networking | sockets + HTTP work over Wi-Fi; PCSL has its own UDP DNS client (patch 0003) because `gethostbyname` in a static glibc has no NSS — servers come from `/data/j2me/tmp/resolv.conf`, kept in step with `net.dns*` by the scripts. IPv4 only |
+| Networking | sockets + HTTP work over Wi-Fi; PCSL has its own UDP DNS client (patch 0003) because `gethostbyname` in a static glibc has no NSS — servers come from `/data/j2me/tmp/resolv.conf`, kept in step with `net.dns*` by the scripts. A Wi-Fi link joined from the shell only gets a default route because `s100_net.sh wifi route` builds a netd network for it (`ndc network create/route add/default set`, netId 100): dhcpcd alone leaves the phone unable to reach anything off-link (Opera Mini "Failed to connect", fixed 2026-09-21). IPv4 only |
 | Telephony / SMS / audio (JSR-120/135) | not started |
 | Boot straight into Java (init.rc service) | not started; `j2me.sh` is started from adb for now |
 
@@ -221,6 +221,12 @@ stock `fb_port.c` when `TARGET_DEVICE=jiophone`:
   KEY_SEND/KEY_PHONE, KEY_POWER as END, KEY_BACKSPACE as CLEAR) **and** a
   loader for a text file (`/data/j2me/keymap.txt` or `$MIDP_KEYMAP`) so the
   table can be corrected on the phone without rebuilding.
+- **Text editing soft keys**: the keypad has no Clear key, so while a
+  `TextBox` or an editable `TextField` has the focus Chameleon's
+  `SoftButtonLayer` switches to Series 40 style: left = **Options** (every
+  command of the screen and the field, then **Cancel**), right = **Clear**
+  (backspace; held, it auto-repeats). With the menu open the keys read
+  Select / Back. The input mode still starts as `Abc`.
 - **Device detection**: `LINUX_FB_JIOPHONE` is the compiled-in default for
   this target; `/proc/cpuinfo` containing `MSM8909`/`Qualcomm` selects it too,
   and `MIDP_FB_DEVICE=jiophone|omap730|zaurus|versatile` overrides.
