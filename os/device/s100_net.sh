@@ -108,6 +108,18 @@ wifi_on() {
     if [ -f "$STATE_DIR/hotspot.on" ]; then
         hotspot_off >/dev/null
     fi
+    # Gecko's wifi_load_driver used to do this (libhardware_legacy): the
+    # Pronto WLAN is a module. insmod needs CAP_SYS_MODULE, which only the
+    # init-started "s100" service has (not an adb /s60su shell).
+    if [ ! -d /sys/class/net/wlan0 ] && [ -f /system/lib/modules/wlan.ko ]; then
+        insmod /system/lib/modules/wlan.ko 2>/dev/null
+        i=0
+        while [ $i -lt 20 ] && [ ! -d /sys/class/net/wlan0 ]; do
+            sleep 0.5; i=$((i + 1))
+        done
+        [ -d /sys/class/net/wlan0 ] || err "Wi-Fi driver did not load"
+        setprop wlan.driver.status ok
+    fi
     if ! wpa_running; then
         setprop ctl.start wpa_supplicant
         i=0
@@ -120,6 +132,9 @@ wifi_on() {
     wpa_running || err "wpa_supplicant did not start"
     wpa reconnect >/dev/null
     wpa enable_network all >/dev/null
+    # a fresh wpa_supplicant does not scan by itself here (Gecko drove the
+    # scans); without one it never finds the saved networks
+    wpa scan >/dev/null
     echo "state=on"
 }
 
@@ -813,8 +828,10 @@ case "$group.$cmd" in
     vpn.connect)      vpn_connect "$1" "$2" "$3" "$4" "$5" "$6" ;;
     vpn.disconnect)   vpn_disconnect ;;
     wifi.status)      wifi_status ;;
-    wifi.on)          wifi_on ;;
-    wifi.off)         wifi_off ;;
+    # the user's choice survives a reboot: j2me.sh boot turns Wi-Fi on
+    # unless appdb/s100_wifi.off exists (KaiOS used to do this)
+    wifi.on)          rm -f /data/j2me/appdb/s100_wifi.off; wifi_on ;;
+    wifi.off)         : > /data/j2me/appdb/s100_wifi.off; wifi_off ;;
     wifi.scan)        wifi_scan ;;
     wifi.saved)       wifi_saved ;;
     wifi.connect)     wifi_connect "$1" "$2" ;;

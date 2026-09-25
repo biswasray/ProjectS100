@@ -450,6 +450,15 @@ final class Sys {
         return lastExit;
     }
 
+    /**
+     * Asks j2me.sh (boot mode) to power the phone off ("off") or reboot it
+     * ("reboot") once the VM has exited; the caller then shuts the AMS down.
+     * There is no KaiOS to fall back to any more.
+     */
+    static void power(String what) {
+        exec("echo " + what + " > " + TMP + "/power.req", 2000);
+    }
+
     static int spawn(String cmd) {
         try {
             return nSpawn(cmd);

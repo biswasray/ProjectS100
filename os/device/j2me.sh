@@ -11,6 +11,11 @@
 #   j2me.sh list                 list installed suites
 #   j2me.sh run <suite#|id> [class]  run one installed suite
 #   j2me.sh sh                   stop b2g, drop into a shell, restart b2g on exit
+#   j2me.sh boot                 the phone's OS: run by init as service "s100"
+#                                (tools/make_s100_boot.py) on a boot with KaiOS
+#                                removed; restarts the app manager whenever it
+#                                exits, powers off / reboots on request from
+#                                the shell (tmp/power.req), never starts b2g
 #   J2ME_KEEP_B2G=1 j2me.sh ...  don't stop/start b2g (for debugging over adb
 #                                while KaiOS keeps the screen; expect fighting)
 #   J2ME_TZ="IST-5:30" j2me.sh   POSIX time zone for the VM (see below)
@@ -154,6 +159,70 @@ wifi_up() {
 ' ' ')" >> "$LOG"
 }
 
+# --- things KaiOS (Gecko) used to do at boot, needed by "j2me.sh boot" ---
+
+# System time. The PMIC RTC is read-only (it counts from 1970 at boot);
+# Qualcomm's time_daemon keeps "real time - RTC" in ms in /data/time/ats_*.
+# Gecko applied it, now we do. mksh arithmetic is 32 bit, so the ms are cut
+# to seconds as a string and the date is built by hand (toybox date has no
+# "@epoch"): days -> civil date after H. Hinnant.
+clock_restore() {
+    [ "$(date +%Y)" -lt 2020 ] || return 0
+    rtc=$(cat /sys/class/rtc/rtc0/since_epoch 2>/dev/null)
+    off=
+    for f in /data/time/ats_12 /data/time/ats_13 /data/time/ats_2; do
+        [ -f "$f" ] || continue
+        off=$(od -A n -t d8 "$f" 2>/dev/null | tr -d ' ')
+        [ -n "$off" ] && [ "$off" != "0" ] && break
+        off=
+    done
+    [ -n "$rtc" ] && [ -n "$off" ] || return 1
+    case "$off" in ????????????*) ;; *) return 1 ;; esac
+    t=$(( ${off%???} + rtc ))
+    s=$((t % 60)); t=$((t / 60)); mi=$((t % 60)); t=$((t / 60))
+    h=$((t % 24)); z=$((t / 24 + 719468))
+    era=$((z / 146097)); doe=$((z - era * 146097))
+    yoe=$(( (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365 ))
+    y=$((yoe + era * 400))
+    doy=$((doe - (365 * yoe + yoe / 4 - yoe / 100)))
+    mp=$(( (5 * doy + 2) / 153 ))
+    d=$((doy - (153 * mp + 2) / 5 + 1))
+    if [ $mp -lt 10 ]; then m=$((mp + 3)); else m=$((mp - 9)); fi
+    [ $m -le 2 ] && y=$((y + 1))
+    # toybox printf prints garbage for %d and "date -s +FORMAT" rejects
+    # what "date -d" accepts, so: hand padding + the default SET format
+    date -u "$(p2 $m)$(p2 $d)$(p2 $h)$(p2 $mi)$y.$(p2 $s)" >/dev/null
+}
+
+p2() {
+    if [ "$1" -lt 10 ]; then echo "0$1"; else echo "$1"; fi
+}
+
+boot_fixups() {
+    clock_restore || echo "[$(date)] clock: could not restore from /data/time" >> "$LOG"
+    # init recreates /data/local/tmp as root:root 0771 on every boot and
+    # KaiOS handed it to the shell user; adb push (deploy.sh) needs that,
+    # and the capability-less /s60su root (screenshot.sh) must write too
+    chown shell:shell /data/local/tmp 2>/dev/null
+    chmod 1777 /data/local/tmp 2>/dev/null
+    # Wi-Fi on unless the user switched it off (s100_net.sh wifi off)
+    if [ ! -f "$J2ME_HOME/appdb/s100_wifi.off" ] && [ -x "$J2ME_HOME/s100_net.sh" ]; then
+        (
+            "$J2ME_HOME/s100_net.sh" wifi on >/dev/null 2>&1
+            i=0
+            while [ $i -lt 30 ]; do
+                r=$("$J2ME_HOME/s100_net.sh" wifi up 2>&1 | tr '\n' ' ')
+                case "$r" in *state=connected*) break ;; esac
+                sleep 2; i=$((i + 1))
+                # rescan now and then (wifi on = reconnect + scan)
+                [ $((i % 8)) -eq 0 ] &&
+                    "$J2ME_HOME/s100_net.sh" wifi on >/dev/null 2>&1
+            done
+            echo "[$(date)] boot wifi: $r" >> "$LOG"
+        ) &
+    fi
+}
+
 run_vm() {
     wifi_up
     write_resolv
@@ -196,13 +265,53 @@ case "$cmd" in
     remove)
         run_vm -1 com.sun.midp.scriptutil.SuiteRemover "$@"
         ;;
+    boot)
+        # Started by init at boot (service s100): root with full
+        # capabilities and the hardware groups, no KaiOS anywhere. The
+        # bootloader splash is still on the panel; make sure it is lit.
+        J2ME_KEEP_B2G=
+        [ -f "$LOG" ] && [ "$(wc -c < "$LOG")" -gt 1048576 ] && mv -f "$LOG" "$LOG.old"
+        echo "[$(date)] boot" >> "$LOG"
+        boot_fixups
+        echo "[$(date)] boot fixups done" >> "$LOG"
+        b2g_stop
+        # Gecko used to announce this; qcom post-boot tuning waits for it
+        setprop sys.boot_completed 1
+        setprop dev.bootcomplete 1
+        fast=0
+        while :; do
+            rm -f "$TMPDIR/power.req"
+            t0=$(date +%s)
+            run_vm -1 com.sun.midp.appmanager.MVMManager
+            req=$(cat "$TMPDIR/power.req" 2>/dev/null)
+            case "$req" in
+                off)    echo "[$(date)] power off" >> "$LOG"
+                        sync; setprop sys.powerctl shutdown; exit 0 ;;
+                reboot) echo "[$(date)] reboot" >> "$LOG"
+                        sync; setprop sys.powerctl reboot; exit 0 ;;
+            esac
+            # crashed or plain exit: start again, backing off if it keeps
+            # dying right away (adb stays usable for repairs)
+            if [ $(( $(date +%s) - t0 )) -lt 20 ]; then
+                fast=$((fast + 1))
+            else
+                fast=0
+            fi
+            if [ $fast -ge 5 ]; then
+                echo "[$(date)] VM keeps exiting, waiting 60 s" >> "$LOG"
+                sleep 60; fast=0
+            else
+                sleep 1
+            fi
+        done
+        ;;
     sh)
         b2g_stop
         trap b2g_start EXIT INT TERM
         /system/bin/sh
         ;;
     *)
-        echo "usage: j2me.sh [ams|run <suite> [class]|install <jad|jar>|list|remove <id>|sh]" >&2
+        echo "usage: j2me.sh [ams|boot|run <suite> [class]|install <jad|jar>|list|remove <id>|sh]" >&2
         exit 2
         ;;
 esac

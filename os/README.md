@@ -45,7 +45,7 @@ fresh PC to Java on the phone; this file is the reference behind it.
 | On-device launcher, deploy, probe, screenshot scripts | **work on hardware** (with the `gsu` helper, see *Root without capabilities*) |
 | Networking | sockets + HTTP work over Wi-Fi; PCSL has its own UDP DNS client (patch 0003) because `gethostbyname` in a static glibc has no NSS — servers come from `/data/j2me/tmp/resolv.conf`, kept in step with `net.dns*` by the scripts. A Wi-Fi link joined from the shell only gets a default route because `s100_net.sh wifi route` builds a netd network for it (`ndc network create/route add/default set`, netId 100): dhcpcd alone leaves the phone unable to reach anything off-link (Opera Mini "Failed to connect", fixed 2026-09-21). IPv4 only. `platformRequest()` on a `.jad`/`.jar` URL (Opera Mini's "Open" on a download) launches the installer (`useJavaInstallerForPlaformRequest=1` in `linux_fb/properties.xml`, extension check added to `CldcPlatformRequest`); any other URL throws `ConnectionNotFoundException` — there is no browser to hand it to |
 | Telephony / SMS / audio (JSR-120/135) | not started |
-| Boot straight into Java (init.rc service) | not started; `j2me.sh` is started from adb for now |
+| Boot straight into Java (init.rc service) | done: `tools/make_s100_boot.py` replaces KaiOS with service `s100` |
 
 First hardware session done (2026-09-20): the app manager, the installer and
 a user MIDlet run on the LCD and take keypad input. Two things had to change
@@ -365,13 +365,39 @@ black LCD with content in `screenshot.sh` = backlight: KaiOS leaves
 nothing. Exiting the AMS (or killing the VM) restarts b2g, which
 re-enumerates USB — expect adb to drop for a few seconds.
 
+### Booting S100 instead of KaiOS
+
+`tools/make_s100_boot.py <rooted_boot.img> <out.img>` edits only the
+ramdisk's `init.b2g.rc`: it deletes the KaiOS services (`b2g`, `api-daemon`,
+`metrics-daemon`, `rilproxy`) and adds service `s100` =
+`/system/bin/sh /data/j2me/j2me.sh boot` (class main, root with full
+capabilities + hardware groups, `seclabel u:r:shell:s0`). Nothing under
+`/system/b2g` or `/system/kaios` is started any more; the files stay on the
+dm-verity protected, read-only `/system`. adbd, rild, wpa_supplicant, media
+etc. are untouched, and `/s60su` + adb keys are kept for repairs.
+
+`j2me.sh boot` sets `sys.boot_completed` (Gecko used to), runs the AMS and
+starts it again whenever it exits (backing off 60 s after 5 quick deaths).
+"Switch off" (long End on the idle screen) and Settings > "Restart phone"
+write `tmp/power.req` (`Sys.power`), and the script then does
+`setprop sys.powerctl shutdown|reboot`.
+
+```bash
+# on the phone the service is controlled with init's start/stop
+adb shell "/s60su -c 'stop s100'"      # ams_stop.sh does this on an S100 boot
+adb shell "/s60su -c 'start s100'"     # ams_start.sh (no args) does this
+```
+
+`deploy.sh` stops and restarts the service around the copy. If
+`/data/j2me` is missing (e.g. after a factory reset) the phone boots to the
+splash screen with adb up: re-run `deploy.sh`. To get KaiOS back, flash the
+rooted boot (`firmware/boot_current_rooted_20260925.img`) or the stock one.
+
 ## Roadmap to a "J2ME OS"
 
 1. ~~Bring-up on hardware~~ done; left over: the port could read the
    backlight/blank state back and restore it for KaiOS on exit.
-2. Boot into Java: add an `init.rc` service (`service j2me /data/j2me/j2me.sh`,
-   `class late_start`) to the rooted boot via `tools/patch_boot.py`, and either
-   disable `b2g` there or keep it as the fallback the AMS can switch back to.
+2. ~~Boot into Java~~ done 2026-09-25, see "Booting S100 instead of KaiOS".
 3. Networking: done for IPv4 (patch 0003 gives PCSL its own UDP resolver;
    the scripts keep `tmp/resolv.conf` in step with `net.dns*`). Still open:
    AAAA records, search domains, and a DNS-over-TLS stub for Private DNS.

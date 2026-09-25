@@ -47,11 +47,24 @@ adb shell "chmod 755 $STAGE/bin/* $STAGE/*.sh"
 adb shell "/s60su -c '$GSU -c id'" | grep -q "(graphics)" || {
     echo "[x] $GSU did not grant the graphics group" >&2; exit 1; }
 
+# On the S100 boot (tools/make_s100_boot.py) init runs the VM as service
+# s100; runMidlet can't be replaced while it runs ("Text file busy").
+svc=$(adb shell getprop init.svc.s100 | tr -d '\r')
+if [[ "$svc" == running ]]; then
+    echo "[*] stopping service s100"
+    adb shell "/s60su -c 'stop s100'"
+    sleep 2
+fi
+
 echo "[*] installing into $DEST"
 su "mkdir -p $DEST/bin $DEST/lib $DEST/appdb $DEST/tmp && chmod 755 $DEST"
 su "cp -r $STAGE/* $DEST/ && chmod 755 $DEST/bin/* $DEST/*.sh"
 adb shell "rm -rf $STAGE"
 GSU=$DEST/bin/gsu
+if [[ "$svc" == running ]]; then
+    echo "[*] starting service s100"
+    adb shell "/s60su -c 'start s100'"
+fi
 
 echo "[+] deployed. Try:"
 echo "      adb shell \"/s60su -c $DEST/j2me.sh\"                       # app manager on the LCD"

@@ -48,12 +48,13 @@ class SettingsMenu {
             new MenuItem("settings.phone", "Phone", "phone", new Runnable() {
                 public void run() { shell.push(new PhoneScreen()); }
             }),
-            new MenuItem("settings.exit", "Exit to KaiOS", "exit", new Runnable() {
+            new MenuItem("settings.exit", "Restart phone", "exit", new Runnable() {
                 public void run() {
-                    shell.showPopup(Popup.confirm("Exit Java and start KaiOS?",
+                    shell.showPopup(Popup.confirm("Restart the phone?",
                         new Popup.Listener() {
                             public void onResult(int r) {
                                 if (r == 1) {
+                                    Sys.power("reboot");
                                     shell.ams.shutdown();
                                 }
                             }

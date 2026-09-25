@@ -5,7 +5,7 @@
  * Series 40 soft keys "Go to" / "Menu" / "Names". Digits open the dialer,
  * the Call key the dialled numbers, navigation keys run the shortcuts
  * from Settings > My shortcuts, long '#' toggles Silent, long End asks
- * to switch off (exit to KaiOS). "Menu, *" locks the keypad, "Unlock, *"
+ * to switch the phone off. "Menu, *" locks the keypad, "Unlock, *"
  * releases it.
  */
 
@@ -187,9 +187,10 @@ class HomeScreen extends Screen {
             Prefs.set(Prefs.PROFILE, next);
             shell.info(next.equals("Silent") ? "Silent" : "General");
         } else if (k == Keymap.END) {
-            shell.showPopup(Popup.confirm("Switch off?\n(back to KaiOS)", new Popup.Listener() {
+            shell.showPopup(Popup.confirm("Switch off?", new Popup.Listener() {
                 public void onResult(int r) {
                     if (r == 1) {
+                        Sys.power("off");
                         shell.ams.shutdown();
                     }
                 }
