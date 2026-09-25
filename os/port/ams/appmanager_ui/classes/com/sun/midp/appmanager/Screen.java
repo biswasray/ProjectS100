@@ -56,6 +56,9 @@ abstract class Screen {
     /** Whether the status bar is painted over the content (idle screen). */
     boolean overlayStatus() { return false; }
 
+    /** True while the screen timeout must not turn the backlight off (video, camera). */
+    boolean keepScreenOn() { return false; }
+
     /** Default right soft key behaviour: leave this screen. */
     void back() {
         shell.pop();

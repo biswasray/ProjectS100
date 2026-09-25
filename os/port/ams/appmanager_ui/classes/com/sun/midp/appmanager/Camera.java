@@ -159,6 +159,8 @@ class Camera {
 
         boolean overlayStatus() { return true; }
 
+        boolean keepScreenOn() { return true; }
+
         String softLeft() { return busy ? null : "Options"; }
         String softMid() {
             if (busy) return null;

@@ -459,6 +459,25 @@ final class Sys {
         exec("echo " + what + " > " + TMP + "/power.req", 2000);
     }
 
+    private static final String BACKLIGHT_NODES =
+        "/sys/class/leds/lcd-backlight/brightness /sys/class/backlight/*/brightness";
+
+    /** Current LCD backlight level (0-255), -1 if unknown. */
+    static int backlight() {
+        String v = SysInfo.readFile("/sys/class/leds/lcd-backlight/brightness", 16);
+        return v == null ? -1 : (int) parseLong(v);
+    }
+
+    /**
+     * Sets the LCD backlight (0 = off). The node is system:system 644, so
+     * like j2me.sh fall back to writing it as uid 1000 through gsu.
+     */
+    static void backlight(int level) {
+        exec("for b in " + BACKLIGHT_NODES + "; do [ -f \"$b\" ] || continue; "
+             + "echo " + level + " 2>/dev/null > \"$b\" || "
+             + HOME + "/bin/gsu -u 1000 -c \"echo " + level + " > $b\"; done", 2000);
+    }
+
     static int spawn(String cmd) {
         try {
             return nSpawn(cmd);

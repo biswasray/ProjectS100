@@ -904,6 +904,8 @@ class MediaPlayer {
 
         boolean overlayStatus() { return full; }
 
+        boolean keepScreenOn() { return Sys.mediaState() == Sys.MS_PLAYING; }
+
         String softLeft() { return error == null ? "Options" : null; }
         String softMid() {
             if (error != null || !opened) return null;

@@ -20,6 +20,10 @@ class SettingsMenu {
     static final String[] WALLPAPERS = {"Blue", "Dark", "Plain"};
     static final String[] WALLPAPER_KEYS = {"blue", "dark", "plain"};
     static final String[] CLOCK_FORMATS = {"24-hour", "12-hour"};
+    static final String P_SCREEN_TIMEOUT = "display.timeout";   // seconds, 0 = never
+    static final String[] TIMEOUT_LABELS = {"15 seconds", "30 seconds", "1 minute",
+                                            "2 minutes", "5 minutes", "10 minutes", "Never"};
+    static final String[] TIMEOUT_KEYS = {"15", "30", "60", "120", "300", "600", "0"};
 
     private final Shell shell;
 
@@ -73,6 +77,11 @@ class SettingsMenu {
         return 0;
     }
 
+    /** Idle seconds before the backlight goes off, 0 = never. */
+    static int screenTimeoutSeconds() {
+        return Prefs.getInt(P_SCREEN_TIMEOUT, 30);
+    }
+
     private void profiles() {
         int cur = indexOf(PROFILES, Prefs.get(Prefs.PROFILE, "General"));
         shell.showPopup(Popup.choice("Profiles", PROFILES, cur, new Popup.Listener() {
@@ -115,6 +124,8 @@ class SettingsMenu {
             add(new Item("Wallpaper", "wallpaper"))
                 .value(WALLPAPERS[indexOf(WALLPAPER_KEYS, wp)]);
             add(new Item("Idle screen text", "operator")).value(Prefs.get(Prefs.OPERATOR, "JioPhone"));
+            add(new Item("Screen timeout", "timeout")).value(
+                TIMEOUT_LABELS[indexOf(TIMEOUT_KEYS, String.valueOf(screenTimeoutSeconds()))]);
         }
 
         void select(Item it) {
@@ -133,6 +144,14 @@ class SettingsMenu {
                        new Popup.Listener() {
                            public void onResult(int r) {
                                Prefs.set(Prefs.WALLPAPER, WALLPAPER_KEYS[r]);
+                           }
+                       });
+            } else if (what.equals("timeout")) {
+                choose("Screen timeout", TIMEOUT_LABELS,
+                       indexOf(TIMEOUT_KEYS, String.valueOf(screenTimeoutSeconds())),
+                       new Popup.Listener() {
+                           public void onResult(int r) {
+                               Prefs.set(P_SCREEN_TIMEOUT, TIMEOUT_KEYS[r]);
                            }
                        });
             } else {

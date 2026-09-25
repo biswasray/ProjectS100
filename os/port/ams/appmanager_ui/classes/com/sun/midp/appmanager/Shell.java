@@ -30,6 +30,11 @@ class Shell extends Canvas {
     /** Automatic keyguard (Settings > Security): last key press, checker. */
     private long lastKeyAt = System.currentTimeMillis();
     private TimerTask idleTask;
+    /** Screen timeout (Settings > Display): backlight is off, level to restore. */
+    private boolean screenOff;
+    private int onLevel = 128;
+    /** The key that woke the screen: its repeats and long press are swallowed. */
+    private boolean wakeKey;
     private int heldKey = Keymap.NONE;
     private boolean longFired;
     /** Action waiting for the current key to be released (see whenReleased). */
@@ -189,11 +194,17 @@ class Shell extends Canvas {
     /* ---------------- keys ---------------- */
 
     protected void keyPressed(int code) {
+        lastKeyAt = System.currentTimeMillis();
+        if (screenOff) {
+            // the first key only turns the screen back on
+            wake();
+            wakeKey = true;
+            return;
+        }
         int k = Keymap.map(code);
         if (k == Keymap.NONE) {
             return;
         }
-        lastKeyAt = System.currentTimeMillis();
         armLongPress(k);
         if (popup != null) {
             popup.key(k);
@@ -215,7 +226,7 @@ class Shell extends Canvas {
 
     protected void keyRepeated(int code) {
         int k = Keymap.map(code);
-        if (k == Keymap.NONE) {
+        if (k == Keymap.NONE || wakeKey) {
             return;
         }
         if (popup != null) {
@@ -226,6 +237,7 @@ class Shell extends Canvas {
     }
 
     protected void keyReleased(int code) {
+        wakeKey = false;
         cancelLongPress();
         Runnable r = afterRelease;
         afterRelease = null;
@@ -349,19 +361,49 @@ class Shell extends Canvas {
         repaint();
     }
 
-    /** Automatic keyguard: locks the idle screen after the configured idle time. */
+    /**
+     * Screen timeout (backlight off) and automatic keyguard (locks the idle
+     * screen) after their configured idle times.
+     */
     private void checkIdle() {
+        long idle = System.currentTimeMillis() - lastKeyAt;
+        int off = SettingsMenu.screenTimeoutSeconds();
+        if (top().keepScreenOn()) {
+            lastKeyAt = System.currentTimeMillis();
+        } else if (off > 0 && !screenOff && idle >= off * 1000L) {
+            sleepScreen();
+        }
         int secs = SecuritySettings.autoLockSeconds();
         if (secs <= 0 || !atHome() || popup != null || home().isLocked()) {
             return;
         }
-        if (System.currentTimeMillis() - lastKeyAt >= secs * 1000L) {
+        if (idle >= secs * 1000L) {
             home().lock();
             repaint();
         }
     }
 
+    private void sleepScreen() {
+        int level = Sys.backlight();
+        if (level > 0) {
+            onLevel = level;               // keep whatever j2me.sh set
+        }
+        Sys.backlight(0);
+        screenOff = true;
+    }
+
+    /** Turns the backlight back on after the screen timeout; restarts the idle count. */
+    void wake() {
+        lastKeyAt = System.currentTimeMillis();
+        if (screenOff) {
+            screenOff = false;
+            Sys.backlight(onLevel);
+            repaint();
+        }
+    }
+
     protected void hideNotify() {
+        wake();                            // a MIDlet takes the screen
         if (minuteTask != null) {
             minuteTask.cancel();
             minuteTask = null;
